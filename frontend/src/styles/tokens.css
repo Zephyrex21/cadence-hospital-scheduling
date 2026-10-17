@@ -1,0 +1,74 @@
+/*
+ * Cadence design tokens — "Clinical Calm 2.0".
+ * Channels are space-separated RGB so Tailwind's `<alpha-value>` works.
+ * tokens.css + tailwind.config.ts are the single source of truth — no hardcoded
+ * colours in components. Text/background pairings target WCAG AA.
+ */
+
+:root {
+  /* Neutrals */
+  --c-ink: 15 23 42; /* #0F172A — primary text */
+  --c-slate: 51 65 85; /* #334155 — secondary text */
+  --c-muted: 100 116 139; /* #64748B — tertiary text */
+  --c-hairline: 226 232 240; /* #E2E8F0 — borders */
+  --c-canvas: 246 248 251; /* app background (recessed) */
+  --c-surface: 255 255 255; /* cards */
+  --c-elevated: 255 255 255; /* popovers / menus / toasts (shadow lifts in light) */
+  --c-scrim: 15 23 42; /* modal/drawer backdrop — stays dark in both themes */
+
+  /* Login showcase hero — intentionally fixed-dark in both themes so the frosted
+     time-blocks read against it (not a theme surface). */
+  --c-hero: 6 16 26; /* #06101A */
+
+  /* Brand — deep clinical teal + refined accent */
+  --c-brand: 14 124 134; /* #0E7C86 */
+  --c-brand-strong: 11 102 110; /* #0B666E — hover / gradient anchor */
+  --c-brand-accent: 20 184 166; /* #14B8A6 */
+
+  /* Semantic */
+  --c-success: 21 128 61; /* #15803D */
+  --c-warning: 180 83 9; /* #B45309 */
+  --c-danger: 185 28 28; /* #B91C1C */
+  --c-info: 37 99 235; /* #2563EB */
+
+  /* Acuity scale (always paired with a label + shape, never colour alone) */
+  --c-acuity-1: 185 28 28; /* A1 critical */
+  --c-acuity-2: 234 88 12; /* A2 emergent */
+  --c-acuity-3: 202 138 4; /* A3 urgent */
+  --c-acuity-4: 21 128 61; /* A4 semi-urgent */
+  --c-acuity-5: 37 99 235; /* A5 routine */
+
+  /* Motion */
+  --dur-fast: 150ms;
+  --dur: 250ms;
+  --dur-slow: 400ms;
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dark {
+  --c-ink: 241 245 249; /* #F1F5F9 */
+  --c-slate: 203 213 225; /* #CBD5E1 */
+  --c-muted: 148 163 184; /* #94A3B8 */
+  --c-hairline: 51 65 85; /* #334155 */
+  --c-canvas: 2 6 23; /* #020617 */
+  --c-surface: 15 23 42; /* #0F172A */
+  --c-elevated: 30 41 59; /* #1E293B — raised surfaces read above cards */
+  --c-scrim: 0 0 0; /* pure black scrim dims the dark app behind modals */
+
+  --c-brand: 45 212 191; /* lighter teal on dark */
+  --c-brand-strong: 20 184 166;
+  --c-brand-accent: 94 234 212;
+
+  /* Brighter semantic + acuity so text and tints keep AA contrast on dark surfaces */
+  --c-success: 74 222 128; /* #4ADE80 */
+  --c-warning: 251 191 36; /* #FBBF24 */
+  --c-danger: 248 113 113; /* #F87171 */
+  --c-info: 96 165 250; /* #60A5FA */
+
+  --c-acuity-1: 248 113 113;
+  --c-acuity-2: 251 146 60;
+  --c-acuity-3: 250 204 21;
+  --c-acuity-4: 74 222 128;
+  --c-acuity-5: 96 165 250;
+}

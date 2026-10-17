@@ -1,0 +1,24 @@
+# Local infrastructure for Cadence.
+# Phase 0 ships the database service; the backend wires to it in Phase 1.
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: cadence-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cadence}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cadence_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-cadence}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - cadence_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cadence} -d ${POSTGRES_DB:-cadence}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  cadence_pgdata:

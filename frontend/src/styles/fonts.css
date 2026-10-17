@@ -1,0 +1,21 @@
+/*
+ * Self-hosted variable fonts (no CDN). The woff2 files live in /public/fonts and are
+ * preloaded in index.html, so there is no network round-trip to a third party and no
+ * layout shift. font-display: swap paints immediately with the fallback, then swaps.
+ */
+
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('/fonts/inter-variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Variable';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('/fonts/geist-variable.woff2') format('woff2');
+}

@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+*.local
+
+# Databases (local SQLite — dev, tests, and the throwaway E2E db)
+*.db
+
+# E2E screenshot output (self-review captures, not committed)
+e2e-shots/out/
+
+# Env
+.env
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+
+# Local secrets and environment variants
+.env
+.env.*
+!.env.example
+
+# Logs and generated test reports
+*.log
+coverage.xml
+htmlcov/
+frontend/coverage/
+frontend/playwright-report/
+frontend/test-results/
+
+# Additional operating-system files
+.DS_Store
+Thumbs.db
