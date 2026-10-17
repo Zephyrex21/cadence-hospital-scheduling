@@ -45,3 +45,6 @@ frontend/test-results/
 # Additional operating-system files
 .DS_Store
 Thumbs.db
+
+# Local Claude settings
+.claude/settings.local.json
