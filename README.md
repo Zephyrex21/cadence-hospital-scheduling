@@ -215,10 +215,20 @@ pnpm run e2e
 - **Login throttling** — repeated failed sign-ins per client/email are rejected with `429` +
   `Retry-After` (`CADENCE_LOGIN_MAX_ATTEMPTS`, `CADENCE_LOGIN_WINDOW_SEC`). The throttle is
   in-process; use a shared store if you run several API instances.
-- **Upgrading an existing database** — `alembic upgrade head` adds the overlap guards. On
-  PostgreSQL it needs permission to `CREATE EXTENSION btree_gist`, and it fails if existing rows
-  already overlap (cancel/move the duplicates first). If the live database was seeded with the old
-  demo password, run `CADENCE_SEED_PASSWORD=<strong> python -m app.seed` once to rotate it.
+- **Migrations run automatically.** The API applies `alembic upgrade head` on startup
+  (`CADENCE_AUTO_MIGRATE`, default on; a PostgreSQL advisory lock makes concurrent instances take
+  turns). Deploying new code therefore never needs a manual migration step — useful on hosts with
+  no shell, such as Render's free tier. If a migration fails the app refuses to start, so the host
+  keeps serving the previous release instead of running against a mismatched schema.
+- **Upgrading an existing database** — migration `0005` adds the overlap guards. On PostgreSQL it
+  creates the `btree_gist` extension (allowed for the database owner on managed Postgres). Any
+  *pre-existing* overlapping active appointments are invalid by definition, so the migration keeps
+  the earliest-created one and marks the later ones `cancelled` (never deleted) and logs their ids.
+  If the live database was seeded with the old demo password, run
+  `CADENCE_SEED_PASSWORD=<strong> python -m app.seed` once to rotate it.
+- **Free-tier hosting.** On Render's free plan the API sleeps when idle. The UI shows a
+  "waking up the server" notice, polls `/health`, says "Welcome" when it's awake, then disappears.
+  Set `CADENCE_JWT_SECRET` so sign-ins also survive the server restarting.
 
 ## Notes
 

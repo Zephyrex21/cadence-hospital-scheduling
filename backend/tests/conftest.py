@@ -31,12 +31,15 @@ def _test_runtime_settings() -> Iterator[None]:
     from app.core.ratelimit import login_throttle
 
     previous = settings.allow_client_now
+    previous_migrate = settings.auto_migrate
     settings.allow_client_now = True
+    settings.auto_migrate = False  # tests build their schema with create_all
     login_throttle.clear()
     try:
         yield
     finally:
         settings.allow_client_now = previous
+        settings.auto_migrate = previous_migrate
 
 
 @pytest.fixture()

@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     # deployments: otherwise any caller could steer the engine's notion of time.
     allow_client_now: bool = False
 
+    # Bring the database schema up to date automatically when the API starts
+    # (``alembic upgrade head``). This is what lets a platform with no shell / release
+    # step (e.g. Render free tier) deploy new code that needs a new column. A
+    # PostgreSQL advisory lock makes concurrent instances take turns. Tests and the
+    # E2E server (which build their own schema) turn it off.
+    auto_migrate: bool = True
+
     # Login brute-force protection (per client-IP + email, and per email).
     login_max_attempts: int = 5
     login_window_sec: int = 15 * 60

@@ -24,6 +24,7 @@ def main() -> None:
             "e2e_server refuses to run: CADENCE_DATABASE_URL must be a sqlite URL "
             f"(got {settings.database_url!r}), so it never touches a real database."
         )
+    settings.auto_migrate = False  # this process builds its own schema below
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     seed_e2e()

@@ -115,6 +115,29 @@ export interface HealthResponse {
   service: string
 }
 
+/**
+ * Is the API actually up? Resolves false (never throws) on timeout, network error,
+ * a non-2xx proxy error, or a non-JSON "waking up" placeholder page — so callers can
+ * simply poll it while a free-tier host cold-starts.
+ */
+export async function pingBackend(timeoutMs = 20_000): Promise<boolean> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const resp = await fetch(`${BASE}/health`, {
+      signal: controller.signal,
+      cache: 'no-store',
+    })
+    if (!resp.ok) return false
+    const body = (await resp.json()) as Partial<HealthResponse>
+    return body.status === 'ok'
+  } catch {
+    return false
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export function getHealth(): Promise<HealthResponse> {
   return apiFetch<HealthResponse>('/health', { auth: false })
 }

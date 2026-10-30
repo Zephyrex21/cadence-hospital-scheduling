@@ -569,3 +569,81 @@ def test_seed_refuses_demo_password_in_production(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(seed_mod.settings, "seed_password", None)
     with pytest.raises(SystemExit):
         seed_mod._seed_password()
+
+
+# --- 10. Startup auto-migration (a deploy must not need a manual `alembic upgrade`) ----------
+def test_run_migrations_upgrades_an_old_schema_and_cancels_existing_overlaps(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sqlite3
+
+    from alembic import command
+    from app.core import migrate
+
+    db_file = tmp_path / "old.db"
+    monkeypatch.setattr(settings, "database_url", f"sqlite+pysqlite:///{db_file}")
+    cfg = migrate._alembic_config()
+    command.upgrade(cfg, "0004")  # the schema a not-yet-redeployed database has
+
+    def columns(con: sqlite3.Connection) -> list[str]:
+        return [r[1] for r in con.execute("PRAGMA table_info(scheduling_decisions)")]
+
+    appt_insert = (
+        "INSERT INTO appointments (id,patient_id,doctor_id,type_id,scheduled_start,scheduled_end,"
+        "status,origin,acuity,displacement_count,version,created_at,updated_at) "
+        "VALUES (?,?,1,1,?,?,'booked','booked','a5',0,1,?,?)"
+    )
+    ts = "2026-10-30 10:00:00.000000"
+    con = sqlite3.connect(db_file)
+    assert "request_hash" not in columns(con)
+    con.execute(
+        "INSERT INTO users (id,name,email,password_hash,role,is_active,created_at,updated_at) "
+        "VALUES (1,'D','d@x.dev','x','doctor',1,?,?)",
+        (ts, ts),
+    )
+    for pid in (1, 2):
+        con.execute(
+            "INSERT INTO patients (id,mrn,name,date_of_birth,sex,created_at,updated_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (pid, f"M{pid}", f"P{pid}", "1990-01-01", "x", ts, ts),
+        )
+    con.execute(
+        "INSERT INTO appointment_types (id,name,default_duration_min,specialty) "
+        "VALUES (1,'G',30,'general')"
+    )
+    # Two ACTIVE appointments for the same doctor that overlap: invalid, pre-existing data.
+    first = ("2026-11-01 09:00:00.000000", "2026-11-01 09:30:00.000000")
+    second = ("2026-11-01 09:15:00.000000", "2026-11-01 09:45:00.000000")
+    con.execute(appt_insert, (1, 1, *first, ts, ts))
+    con.execute(appt_insert, (2, 2, *second, ts, ts))
+    con.commit()
+    con.close()
+
+    migrate.run_migrations()  # what the API now does on startup
+
+    con = sqlite3.connect(db_file)
+    assert "request_hash" in columns(con)
+    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0005"
+    # Earliest kept, later duplicate cancelled, nothing deleted.
+    assert dict(con.execute("SELECT id, status FROM appointments")) == {1: "booked", 2: "cancelled"}
+    with pytest.raises(sqlite3.IntegrityError):  # and the guard is now live
+        con.execute(appt_insert, (3, 2, *first, ts, ts))
+    con.close()
+    migrate.run_migrations()  # idempotent: a second startup is a no-op
+
+
+def test_app_startup_runs_migrations_only_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core import migrate
+    from app.main import create_app
+
+    calls: list[int] = []
+    monkeypatch.setattr("app.main.run_migrations", lambda: calls.append(1))
+    monkeypatch.setattr(migrate, "run_migrations", lambda: calls.append(1))
+    monkeypatch.setattr(settings, "auto_migrate", False)
+    with TestClient(create_app()):
+        pass
+    assert calls == []
+    monkeypatch.setattr(settings, "auto_migrate", True)
+    with TestClient(create_app()):
+        pass
+    assert calls == [1]

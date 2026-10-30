@@ -6,6 +6,9 @@ Further modules (scheduling, triage, dashboard, …) are added in later phases.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,10 +23,18 @@ from app.api.patients import router as patients_router
 from app.api.scheduling import router as scheduling_router
 from app.core.config import settings
 from app.core.errors import AppError, app_error_handler
+from app.core.migrate import run_migrations
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    if settings.auto_migrate:
+        run_migrations()
+    yield
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title=settings.app_name, version=__version__)
+    app = FastAPI(title=settings.app_name, version=__version__, lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
