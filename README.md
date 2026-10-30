@@ -24,11 +24,19 @@ the signature flow).
   automatic application only when the engine auto-approves, and escalation to a clinician
   otherwise. Acuity is **enforced server-side** — plan/commit are refused unless the patient has a
   recent triage (last 12 h) whose acuity matches the request (receptionists see the nurse's recorded
-  acuity read-only); a reviewed plan older than 10 minutes is rejected so it can be re-planned.
+  acuity read-only). The **server clock is authoritative** (a client-supplied `now` is ignored
+  outside tests), commit recomputes the plan and refuses it if it no longer matches the
+  `plan_digest` the reviewer saw, and **one triage authorises exactly one emergency**.
   In-progress consultations are never displaced, and no patient is placed into two overlapping
-  appointments.
-- **Booking** — fits an appointment inside a doctor's shift with no double-booking; rejects times in
-  the past (and hides past slots) and rejects a patient already booked over that time.
+  appointments — across *all* doctors, enforced by the database itself (see below).
+- **Escalations are actionable** — A1 and any plan the engine will not auto-apply are recorded and
+  appear in the dashboard inbox. A nurse/administrator can **Review options** and **Apply** one:
+  the chosen option is re-validated against the live schedule (all hard constraints re-checked)
+  before it is written, so a stale option is refused rather than applied.
+- **Booking** — fits an appointment inside a doctor's shift with **no double-booking, guaranteed by
+  the database** (PostgreSQL exclusion constraints; equivalent triggers on SQLite) for both the
+  doctor and the patient, plus per-doctor advisory locks on PostgreSQL so concurrent requests
+  queue instead of racing; rejects times in the past (and hides past slots).
 - **Priority queue** with wait estimates, and doctor consultation-status management
   (check-in → start → complete / no-show).
 - **History & oversight** — a displacements register, per-decision trace viewer, and an
@@ -108,7 +116,11 @@ pnpm run dev        # or: npm run dev
 
 Open **http://localhost:5173** and sign in. The dev server proxies `/api/*` to the backend.
 
-### Demo accounts (all password `cadence123`)
+### Demo accounts (local development only — password `cadence123`)
+
+> The well-known demo password exists **only for local development**. Anywhere real, set
+> `CADENCE_SEED_PASSWORD` before seeding — it is *required* when `CADENCE_ENV=production`, and
+> re-running the seed with it set **rotates the password of already-seeded accounts**.
 
 | Email                     | Role          | Can do                                      |
 | ------------------------- | ------------- | ------------------------------------------- |
@@ -191,12 +203,32 @@ pnpm run e2e
 └── .github/workflows/       CI
 ```
 
+## Security & deployment checklist
+
+- **`CADENCE_JWT_SECRET`** — there is no built-in default. Outside production, an unset secret
+  becomes a random per-process one (sessions end on restart). With `CADENCE_ENV=production` the
+  app **refuses to start** unless it is set to a random value of at least 32 characters
+  (`python -c "import secrets; print(secrets.token_urlsafe(48))"`).
+- **`CADENCE_SEED_PASSWORD`** — required to seed in production; use a strong, unique value.
+- **`CADENCE_ALLOW_CLIENT_NOW`** — test/E2E only (pins the clock); must stay off in production
+  (startup fails if enabled there).
+- **Login throttling** — repeated failed sign-ins per client/email are rejected with `429` +
+  `Retry-After` (`CADENCE_LOGIN_MAX_ATTEMPTS`, `CADENCE_LOGIN_WINDOW_SEC`). The throttle is
+  in-process; use a shared store if you run several API instances.
+- **Upgrading an existing database** — `alembic upgrade head` adds the overlap guards. On
+  PostgreSQL it needs permission to `CREATE EXTENSION btree_gist`, and it fails if existing rows
+  already overlap (cancel/move the duplicates first). If the live database was seeded with the old
+  demo password, run `CADENCE_SEED_PASSWORD=<strong> python -m app.seed` once to rotate it.
+
 ## Notes
 
 - All timestamps are stored in **UTC**; `CADENCE_CLINIC_TIMEZONE` is for display only.
 - Configuration is via environment variables prefixed `CADENCE_` (see `.env.example`),
   read from a `backend/.env` file if present.
-- The seed is idempotent — safe to re-run.
+- The seed is idempotent — safe to re-run. It creates shifts for the next 14 days, so a
+  long-lived demo does not run out of availability.
+- Run the whole backend suite against a real PostgreSQL with
+  `CADENCE_TEST_DATABASE_URL=postgresql+psycopg://… pytest` (the concurrency tests run there).
 
 ## License
 

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.db import Base
 from app.core.enums import Acuity, AppointmentOrigin, AppointmentStatus
 from app.models.base import TimestampMixin, UtcDateTime
+from app.models.overlap_guard import install as _install_overlap_guard
 
 if TYPE_CHECKING:
     from app.models.appointment_type import AppointmentType
@@ -73,3 +74,8 @@ class Appointment(Base, TimestampMixin):
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         return f"<Appointment id={self.id} doctor={self.doctor_id} start={self.scheduled_start}>"
+
+
+# Make the database itself refuse overlapping active appointments (per doctor and
+# per patient) — see ``overlap_guard`` for the PostgreSQL / SQLite mechanisms.
+_install_overlap_guard(Appointment.__table__)  # type: ignore[arg-type]

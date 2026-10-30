@@ -7,6 +7,7 @@ FastAPI ``get_db`` dependency is overridden to use the test session.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Iterator
 
 import pytest
@@ -23,13 +24,35 @@ from app.main import app
 from app.models.user import User
 
 
+@pytest.fixture(autouse=True)
+def _test_runtime_settings() -> Iterator[None]:
+    """Tests pin the clock via the request ``now``; reset the login throttle per test."""
+    from app.core.config import settings
+    from app.core.ratelimit import login_throttle
+
+    previous = settings.allow_client_now
+    settings.allow_client_now = True
+    login_throttle.clear()
+    try:
+        yield
+    finally:
+        settings.allow_client_now = previous
+
+
 @pytest.fixture()
 def db_session() -> Iterator[Session]:
-    engine = create_engine(
-        "sqlite+pysqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
+    pg_url = os.environ.get("CADENCE_TEST_DATABASE_URL")
+    if pg_url:
+        # Optional: run the whole suite against a real PostgreSQL (exclusion
+        # constraints, advisory locks). The schema is dropped and recreated per test.
+        engine = create_engine(pg_url, future=True)
+        Base.metadata.drop_all(engine)
+    else:
+        engine = create_engine(
+            "sqlite+pysqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     session = factory()

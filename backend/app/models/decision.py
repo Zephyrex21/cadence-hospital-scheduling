@@ -33,6 +33,11 @@ class SchedulingDecision(Base):
     # Dedupe key so a double-clicked commit cannot apply twice.
     idempotency_key: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
 
+    # Hash of (actor, patient, type, acuity) bound to the idempotency key, so a
+    # reused key with a *different* request is rejected instead of silently
+    # returning someone else's result.
+    request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     input_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     chosen_plan: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     alternatives: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)

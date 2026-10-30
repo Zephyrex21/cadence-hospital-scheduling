@@ -22,6 +22,9 @@ export class ApiError extends Error {
   }
 }
 
+/** Fired on `window` when the session can no longer be refreshed. */
+export const AUTH_EXPIRED_EVENT = 'cadence:auth-expired'
+
 export class AuthExpiredError extends ApiError {
   constructor() {
     super(401, 'session_expired', 'Your session has expired. Please sign in again.')
@@ -96,6 +99,8 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
       resp = await run()
     } else {
       clearTokens()
+      // Tell the auth layer so it can drop the session and send the user to login.
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
       throw new AuthExpiredError()
     }
   }

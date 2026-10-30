@@ -7,13 +7,15 @@ import type { Appointment, Doctor } from '../../types'
 import {
   PX_PER_MIN,
   blockGeometry,
+  computeWindow,
   formatHour,
   formatTime,
   hourLabels,
   minutesFromDayStart,
   statusLabel,
   statusTone,
-  timelineHeightPx,
+  windowHeightPx,
+  type DayWindow,
 } from './timeline'
 
 const HEADER_H = 48 // column header height (h-12), also the gutter's top padding
@@ -42,7 +44,10 @@ export function ScheduleTimeline({ doctors, appointments, nowIso }: ScheduleTime
     byDoctor.set(a.doctor.id, list)
   }
 
-  const nowTop = nowIso ? minutesFromDayStart(nowIso) * PX_PER_MIN : null
+  const win = computeWindow(appointments)
+  const timelineHeightPx = windowHeightPx(win)
+  const hourTop = (h: number) => (h - win.startHour) * 60 * PX_PER_MIN
+  const nowTop = nowIso ? minutesFromDayStart(nowIso, win) * PX_PER_MIN : null
   const showNow = nowTop !== null && nowTop >= 0 && nowTop <= timelineHeightPx
 
   return (
@@ -51,11 +56,11 @@ export function ScheduleTimeline({ doctors, appointments, nowIso }: ScheduleTime
         {/* Hour gutter */}
         <div className="w-16 shrink-0 border-r border-hairline" style={{ paddingTop: HEADER_H }}>
           <div className="relative" style={{ height: timelineHeightPx }}>
-            {hourLabels().map((h) => (
+            {hourLabels(win).map((h) => (
               <div
                 key={h}
                 className="absolute right-2 -translate-y-1/2 text-xs tabular-nums text-muted"
-                style={{ top: blockGeometry(hourIso(h), hourIso(h)).top }}
+                style={{ top: hourTop(h) }}
               >
                 {formatHour(h)}
               </div>
@@ -79,11 +84,11 @@ export function ScheduleTimeline({ doctors, appointments, nowIso }: ScheduleTime
               </span>
             </div>
             <div className="relative" style={{ height: timelineHeightPx }}>
-              {hourLabels().map((h) => (
+              {hourLabels(win).map((h) => (
                 <div
                   key={h}
                   className="absolute inset-x-0 border-t border-hairline/40"
-                  style={{ top: blockGeometry(hourIso(h), hourIso(h)).top }}
+                  style={{ top: hourTop(h) }}
                 />
               ))}
               {showNow && (
@@ -99,6 +104,7 @@ export function ScheduleTimeline({ doctors, appointments, nowIso }: ScheduleTime
                   <AppointmentBlock
                     key={a.id}
                     appointment={a}
+                    window={win}
                     active={hover?.appt.id === a.id}
                     onShow={(rect) => setHover({ appt: a, rect })}
                     onHide={() => setHover(null)}
@@ -114,22 +120,24 @@ export function ScheduleTimeline({ doctors, appointments, nowIso }: ScheduleTime
   )
 }
 
-function hourIso(h: number): string {
-  return `2026-01-01T${String(h).padStart(2, '0')}:00:00Z`
-}
-
 function AppointmentBlock({
   appointment,
+  window,
   active,
   onShow,
   onHide,
 }: {
   appointment: Appointment
+  window: DayWindow
   active: boolean
   onShow: (rect: DOMRect) => void
   onHide: () => void
 }) {
-  const { top, height } = blockGeometry(appointment.scheduled_start, appointment.scheduled_end)
+  const { top, height } = blockGeometry(
+    appointment.scheduled_start,
+    appointment.scheduled_end,
+    window,
+  )
   const tone = statusTone(appointment.status)
   const locked = appointment.status === 'in_progress'
 

@@ -15,14 +15,30 @@ from app.core.db import get_db
 from app.core.deps import require_roles
 from app.core.enums import Role
 from app.models.user import User
-from app.schemas.emergency import CommitRequest, CommitResponse, PlanRequest, PlanResponse
+from app.schemas.emergency import (
+    ApplyRequest,
+    CommitRequest,
+    CommitResponse,
+    OptionsResponse,
+    PlanRequest,
+    PlanResponse,
+)
 from app.schemas.triage import TriageCreate, TriageRead
-from app.services.emergency import commit_emergency, create_triage, latest_triage, plan_emergency
+from app.services.emergency import (
+    apply_escalated_option,
+    commit_emergency,
+    create_triage,
+    escalation_options,
+    latest_triage,
+    plan_emergency,
+)
 
 router = APIRouter(tags=["emergency"])
 
 TRIAGE_ROLES = (Role.TRIAGE_NURSE, Role.ADMINISTRATOR)
 EMERGENCY_ROLES = (Role.RECEPTIONIST, Role.TRIAGE_NURSE, Role.ADMINISTRATOR)
+# Clinical sign-off on an escalation (apply a human-approved option).
+APPLY_ROLES = (Role.TRIAGE_NURSE, Role.ADMINISTRATOR)
 
 
 @router.post("/triage", response_model=TriageRead, status_code=status.HTTP_201_CREATED)
@@ -84,6 +100,35 @@ def commit(
         acuity=body.acuity,
         fingerprint=body.fingerprint,
         idempotency_key=body.idempotency_key,
+        plan_digest_value=body.plan_digest,
         now=body.now,
+    )
+    return CommitResponse.model_validate(result)
+
+
+@router.get("/escalations/{decision_id}/options", response_model=OptionsResponse)
+def get_escalation_options(
+    decision_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(*APPLY_ROLES)),
+) -> OptionsResponse:
+    """The ranked options a clinician can choose from for an unresolved escalation."""
+    return OptionsResponse.model_validate(escalation_options(db, decision_id))
+
+
+@router.post("/escalations/{decision_id}/apply", response_model=CommitResponse)
+def apply_escalation(
+    decision_id: int,
+    body: ApplyRequest,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(*APPLY_ROLES)),
+) -> CommitResponse:
+    """Apply a clinician-approved option. Re-validated against the live schedule."""
+    result = apply_escalated_option(
+        db,
+        decision_id=decision_id,
+        option_index=body.option_index,
+        actor_id=actor.id,
+        note=body.note,
     )
     return CommitResponse.model_validate(result)

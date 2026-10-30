@@ -11,10 +11,10 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.core.clock import resolve_now
 from app.core.db import get_db
 from app.core.deps import get_current_user, require_roles
 from app.core.enums import Role
-from app.models.base import utcnow
 from app.models.user import User
 from app.schemas.consultation import (
     QueueEntryOut,
@@ -35,7 +35,7 @@ def get_queue(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[QueueEntryOut]:
-    entries = list_queue(db, now or utcnow(), doctor_id)
+    entries = list_queue(db, resolve_now(now), doctor_id)
     return [QueueEntryOut.model_validate(e) for e in entries]
 
 

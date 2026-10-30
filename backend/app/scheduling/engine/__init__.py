@@ -11,7 +11,7 @@ plan transactionally.
 
 from __future__ import annotations
 
-from app.scheduling.engine.engine import insert_emergency
+from app.scheduling.engine.engine import insert_emergency, plan_at
 from app.scheduling.engine.types import (
     ACUITY_LEVEL,
     ENGINE_VERSION,
@@ -29,6 +29,7 @@ from app.scheduling.engine.types import (
 
 __all__ = [
     "insert_emergency",
+    "plan_at",
     "EngineState",
     "EngineRequest",
     "EngineParameters",

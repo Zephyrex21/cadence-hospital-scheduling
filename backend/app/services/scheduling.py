@@ -4,8 +4,10 @@ Enforces the Phase 2 invariants server-side (the client cannot be trusted):
   * an appointment must fit entirely within one of the doctor's shifts;
   * it must not overlap another active appointment for that doctor.
 
-The booking write takes a row lock on the doctor's active appointments so two
-concurrent bookings cannot both pass the conflict check (see ``book_appointment``).
+Concurrency: ``book_appointment`` serialises writers per doctor (advisory lock on
+PostgreSQL) and the database itself refuses overlapping active appointments for a
+doctor or a patient (exclusion constraint / trigger — see ``models.overlap_guard``),
+so two concurrent bookings can never both succeed.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.enums import AppointmentOrigin, AppointmentStatus, AuditAction
@@ -28,6 +31,7 @@ from app.models.user import User
 from app.scheduling.availability import Interval, fits_in_any, generate_slots, has_conflict
 from app.schemas.scheduling import AppointmentCreate
 from app.services.audit import record_audit
+from app.services.locking import lock_doctors
 
 # Statuses that still occupy a doctor's time (used for conflict detection).
 ACTIVE_STATUSES = (
@@ -61,7 +65,7 @@ def _busy_intervals(
         Appointment.scheduled_end > lo,
     )
     if for_update:
-        stmt = stmt.with_for_update()
+        stmt = stmt.with_for_update(of=Appointment)
     return [(a.id, Interval(a.scheduled_start, a.scheduled_end)) for a in db.scalars(stmt)]
 
 
@@ -114,7 +118,10 @@ def available_slots(db: Session, doctor_id: int, type_id: int, day: datetime) ->
         raise NotFoundError("Appointment type not found")
     lo, hi = _day_bounds(day)
     shifts = _shift_intervals(db, doctor_id, lo, hi)
-    busy = [iv for _, iv in _busy_intervals(db, doctor_id, lo, hi)]
+    # Shifts can straddle the day boundary; look at busy time across their full extent.
+    busy_lo = min((s.start for s in shifts), default=lo)
+    busy_hi = max((s.end for s in shifts), default=hi)
+    busy = [iv for _, iv in _busy_intervals(db, doctor_id, busy_lo, busy_hi)]
     slots = generate_slots(shifts, busy, appt_type.default_duration_min)
     # Never offer a slot that has already started — the clock moves while the
     # page is open, so a slot valid at render can be in the past at booking.
@@ -149,7 +156,6 @@ def book_appointment(db: Session, data: AppointmentCreate, *, actor_id: int) -> 
     start = ensure_aware_utc(data.scheduled_start)
     end = start + timedelta(minutes=appt_type.default_duration_min)
     candidate = Interval(start, end)
-    lo, hi = _day_bounds(start)
 
     # Cannot book into the past.
     if start < utcnow():
@@ -158,21 +164,25 @@ def book_appointment(db: Session, data: AppointmentCreate, *, actor_id: int) -> 
             details={"code": "past_time"},
         )
 
-    shifts = _shift_intervals(db, data.doctor_id, lo, hi)
+    # Serialise concurrent writers for this doctor *before* reading, so a second
+    # request re-reads the schedule after the first committed.
+    lock_doctors(db, [data.doctor_id])
+
+    # Look at the candidate's own time range (not a UTC calendar day): a booking
+    # near midnight must still see appointments just across the boundary.
+    shifts = _shift_intervals(db, data.doctor_id, start, end)
     if not fits_in_any(candidate, shifts):
         raise ValidationError("Requested time is outside the doctor's availability")
 
     # The patient cannot be in two places at once — reject an overlap with any of
     # their own active appointments (across every doctor), not just this doctor's.
-    if has_conflict(candidate, _patient_busy_intervals(db, data.patient_id, lo, hi)):
+    if has_conflict(candidate, _patient_busy_intervals(db, data.patient_id, start, end)):
         raise ConflictError(
             "The patient already has an appointment overlapping that time",
             details={"code": "patient_overlap"},
         )
 
-    # Row-lock active appointments for this doctor/day so a concurrent booking
-    # cannot slip a conflicting slot past this check.
-    busy = [iv for _, iv in _busy_intervals(db, data.doctor_id, lo, hi, for_update=True)]
+    busy = [iv for _, iv in _busy_intervals(db, data.doctor_id, start, end, for_update=True)]
     if has_conflict(candidate, busy):
         raise ConflictError("That time slot is no longer available")
 
@@ -187,7 +197,12 @@ def book_appointment(db: Session, data: AppointmentCreate, *, actor_id: int) -> 
         version=1,
     )
     db.add(appointment)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # The database overlap guard caught a race the checks above could not see.
+        db.rollback()
+        raise ConflictError("That time slot is no longer available") from None
 
     record_audit(
         db,
@@ -201,7 +216,11 @@ def book_appointment(db: Session, data: AppointmentCreate, *, actor_id: int) -> 
             "scheduled_start": start.isoformat(),
         },
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ConflictError("That time slot is no longer available") from None
     db.refresh(appointment)
     return appointment
 
@@ -214,7 +233,7 @@ def cancel_appointment(
     reason: str | None = None,
     expected_version: int | None = None,
 ) -> Appointment:
-    appt = db.get(Appointment, appointment_id, with_for_update=True)
+    appt = db.get(Appointment, appointment_id, with_for_update={"of": Appointment})
     if appt is None:
         raise NotFoundError("Appointment not found")
     if appt.status in (AppointmentStatus.CANCELLED, AppointmentStatus.COMPLETED):

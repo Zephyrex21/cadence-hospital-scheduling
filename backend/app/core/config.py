@@ -6,7 +6,16 @@ Settings are read from environment variables (prefixed ``CADENCE_``) and an opti
 
 from __future__ import annotations
 
+import logging
+import secrets
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_log = logging.getLogger("cadence.config")
+
+# Secrets that have appeared in the public repo / docs and must never be trusted.
+_KNOWN_INSECURE_SECRETS = {"", "dev-insecure-secret-change-me", "change-me", "secret"}
 
 
 class Settings(BaseSettings):
@@ -29,12 +38,47 @@ class Settings(BaseSettings):
         "postgresql+psycopg://cadence:cadence_dev_password@localhost:5432/cadence"
     )
 
-    # Auth / JWT. The default secret is for development only and MUST be
-    # overridden (CADENCE_JWT_SECRET) anywhere real.
-    jwt_secret: str = "dev-insecure-secret-change-me"
+    # Auth / JWT. There is deliberately NO usable default secret: if
+    # CADENCE_JWT_SECRET is unset (or is a known-insecure value) outside
+    # production a random per-process secret is generated (tokens then stop
+    # working after a restart, which is safe); in production the app refuses to
+    # start without a strong secret (>= 32 characters).
+    jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     access_token_ttl_min: int = 30
     refresh_token_ttl_min: int = 60 * 24 * 7  # 7 days
+
+    # The scheduling endpoints take an optional client-supplied ``now`` so tests
+    # and the deterministic E2E can pin the clock. It MUST stay off in real
+    # deployments: otherwise any caller could steer the engine's notion of time.
+    allow_client_now: bool = False
+
+    # Login brute-force protection (per client-IP + email, and per email).
+    login_max_attempts: int = 5
+    login_window_sec: int = 15 * 60
+
+    # Password for seeded demo staff. Required in production (the well-known
+    # demo password is only used for local development).
+    seed_password: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_secrets(self) -> Settings:
+        insecure = self.jwt_secret.strip() in _KNOWN_INSECURE_SECRETS
+        if self.is_production:
+            if insecure or len(self.jwt_secret) < 32:
+                raise ValueError(
+                    "CADENCE_JWT_SECRET must be set to a random value of at least 32 "
+                    "characters when CADENCE_ENV=production"
+                )
+            if self.allow_client_now:
+                raise ValueError("CADENCE_ALLOW_CLIENT_NOW must not be enabled in production")
+        elif insecure:
+            self.jwt_secret = secrets.token_urlsafe(48)
+            _log.warning(
+                "CADENCE_JWT_SECRET is not set; using a random per-process secret "
+                "(sessions will not survive a restart)."
+            )
+        return self
 
     @property
     def cors_origins_list(self) -> list[str]:

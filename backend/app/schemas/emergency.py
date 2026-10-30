@@ -18,13 +18,17 @@ class PlanRequest(BaseModel):
     patient_id: int
     type_id: int
     acuity: Acuity
-    # Optional explicit "now" (for the synthetic demo / tests); defaults to UTC now.
+    # Honoured ONLY when CADENCE_ALLOW_CLIENT_NOW is enabled (tests / pinned E2E).
+    # In every real deployment the server clock is authoritative and this is ignored.
     now: datetime | None = None
 
 
 class CommitRequest(PlanRequest):
     fingerprint: str = Field(min_length=1)
     idempotency_key: str | None = Field(default=None, max_length=80)
+    # Digest of the plan the reviewer approved (from the plan response). If the
+    # recomputed plan no longer matches, the commit is refused.
+    plan_digest: str | None = Field(default=None, max_length=64)
 
 
 # --- serialized Decision shapes ---------------------------------------------
@@ -88,8 +92,8 @@ class ApptDetail(BaseModel):
 
 class PlanResponse(BaseModel):
     fingerprint: str
-    # The instant the plan was computed against — echoed back on commit so the
-    # server can reject a plan that has since gone stale (see PLAN_MAX_AGE).
+    plan_digest: str | None = None
+    # The server instant the plan was computed against (informational).
     now: datetime
     decision: DecisionOut
     emergency_patient: PatientSummary
@@ -110,3 +114,22 @@ class CommitResponse(BaseModel):
     emergency_appointment_id: int | None
     reasons: list[str]
     displaced: list[DisplacedOut]
+
+
+class OptionOut(PlanOut):
+    index: int
+    applicable: bool
+
+
+class OptionsResponse(BaseModel):
+    decision_id: int
+    reasons: list[str]
+    emergency_patient: PatientSummary
+    options: list[OptionOut]
+    appointment_details: dict[str, ApptDetail]
+    doctor_names: dict[str, str]
+
+
+class ApplyRequest(BaseModel):
+    option_index: int = Field(ge=0)
+    note: str | None = Field(default=None, max_length=400)

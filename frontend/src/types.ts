@@ -123,7 +123,10 @@ export interface ApptDetail {
 
 export interface PlanResponse {
   fingerprint: string
-  /** The instant the plan was computed against — echoed back on commit (A4). */
+  /** Hash of the proposed placement + moves; sent back on commit so a plan that
+   *  changed after review is refused instead of silently applied. */
+  plan_digest: string | null
+  /** The server instant the plan was computed against (informational). */
   now: string
   decision: EmergencyDecision
   emergency_patient: { id: number; name: string; mrn: string }
@@ -142,7 +145,7 @@ export interface LatestTriage {
 }
 
 export interface CommitResponse {
-  status: 'auto' | 'escalate'
+  status: 'auto' | 'escalate' | 'applied'
   decision_id: number
   emergency_appointment_id: number | null
   reasons: string[]
@@ -253,4 +256,19 @@ export interface DashboardSummary {
   waiting_by_acuity: Record<Acuity, number>
   recent_escalations: EscalationItem[]
   doctor_load: DoctorLoad[]
+}
+
+export interface EscalationOption extends EmergencyPlan {
+  index: number
+  /** False when the option violates a hard safety constraint (informational only). */
+  applicable: boolean
+}
+
+export interface EscalationOptions {
+  decision_id: number
+  reasons: string[]
+  emergency_patient: { id: number; name: string; mrn: string }
+  options: EscalationOption[]
+  appointment_details: Record<string, ApptDetail>
+  doctor_names: Record<string, string>
 }

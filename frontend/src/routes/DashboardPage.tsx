@@ -12,7 +12,9 @@ import { useToast } from '../components/Toast'
 import { useAuth } from '../features/auth/AuthContext'
 import { canRecordTriage, ROLE_LABELS } from '../features/auth/roles'
 import { formatRunningDelay, useDashboard } from '../features/dashboard/api'
+import { useApplyEscalation, useEscalationOptions } from '../features/emergency/api'
 import { ACUITY_LABEL, ACUITY_ORDER, acuityDotClass, reasonText } from '../features/emergency/format'
+import { PlanBody } from '../features/emergency/PlanReview'
 import { formatDateTime } from '../features/history/format'
 import { useResolveEscalation } from '../features/history/api'
 import { ApiError } from '../lib/api'
@@ -82,6 +84,7 @@ function DashboardBody({ data }: { data: DashboardSummary }) {
   const { user } = useAuth()
   const canResolve = user ? canRecordTriage(user.role) : false
   const [resolving, setResolving] = useState<EscalationItem | null>(null)
+  const [reviewing, setReviewing] = useState<EscalationItem | null>(null)
   return (
     <m.div
       variants={staggerContainer(0.06)}
@@ -155,7 +158,10 @@ function DashboardBody({ data }: { data: DashboardSummary }) {
                       {e.reasons.map((r) => reasonText(r)).join(' · ')}
                     </p>
                     {canResolve && (
-                      <div className="mt-2">
+                      <div className="mt-2 flex gap-2">
+                        <Button size="sm" onClick={() => setReviewing(e)}>
+                          Review options
+                        </Button>
                         <Button size="sm" variant="secondary" onClick={() => setResolving(e)}>
                           Resolve
                         </Button>
@@ -215,7 +221,127 @@ function DashboardBody({ data }: { data: DashboardSummary }) {
       {resolving && (
         <ResolveDialog item={resolving} onClose={() => setResolving(null)} />
       )}
+      {reviewing && (
+        <OptionsDialog item={reviewing} onClose={() => setReviewing(null)} />
+      )}
     </m.div>
+  )
+}
+
+/** Clinician review of an escalation: pick one of the engine's options and apply
+ *  it. The server re-validates the option against the live schedule first. */
+function OptionsDialog({ item, onClose }: { item: EscalationItem; onClose: () => void }) {
+  const options = useEscalationOptions(item.decision_id)
+  const apply = useApplyEscalation()
+  const { toast } = useToast()
+  const [note, setNote] = useState('')
+
+  async function applyOption(index: number) {
+    try {
+      const res = await apply.mutateAsync({ id: item.decision_id, optionIndex: index, note: note.trim() })
+      toast({
+        tone: 'success',
+        title: 'Emergency scheduled',
+        description: `${item.patient_name} — ${res.displaced.length} appointment${
+          res.displaced.length === 1 ? '' : 's'
+        } rescheduled.`,
+      })
+      onClose()
+    } catch {
+      /* surfaced below via apply.error */
+    }
+  }
+
+  const applyError =
+    apply.error instanceof ApiError
+      ? apply.error.message
+      : apply.error
+        ? 'Could not apply this option.'
+        : null
+  const loadError =
+    options.error instanceof ApiError
+      ? options.error.message
+      : options.error
+        ? 'Could not load the options.'
+        : null
+  const data = options.data
+
+  return (
+    <Modal
+      title={`Review options — ${item.patient_name}`}
+      onClose={onClose}
+      footer={
+        <Button variant="ghost" onClick={onClose}>
+          Close
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {options.isLoading && <p className="text-sm text-muted">Loading options…</p>}
+        {loadError && (
+          <p role="alert" className="text-sm text-danger">
+            {loadError}
+          </p>
+        )}
+        {data && data.options.length === 0 && (
+          <p className="text-sm text-muted">
+            The engine found no placement. Handle this manually, then use Resolve to record how.
+          </p>
+        )}
+        {data && data.options.length > 0 && (
+          <>
+            <p className="text-sm text-muted">
+              Choose how to place this patient. The option is re-checked against the current
+              schedule when you apply it; if anything changed you will be asked to re-plan.
+            </p>
+            {data.options.map((opt) => (
+              <div
+                key={opt.index}
+                className="flex flex-col gap-3 rounded-card border border-hairline bg-canvas p-3"
+              >
+                <PlanBody
+                  plan={opt}
+                  details={data.appointment_details}
+                  doctorNames={data.doctor_names}
+                  muted={!opt.applicable}
+                />
+                {opt.applicable ? (
+                  <div>
+                    <Button
+                      size="sm"
+                      onClick={() => applyOption(opt.index)}
+                      loading={apply.isPending}
+                    >
+                      Apply option {opt.index + 1}
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-warning">
+                    Not applicable automatically: {opt.reject_reasons.map(reasonText).join(' · ')}
+                  </p>
+                )}
+              </div>
+            ))}
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted">
+                Note (optional, written to the audit trail)
+              </span>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                className="rounded-control border border-hairline bg-surface px-3 py-2 text-sm text-ink shadow-xs outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/30"
+              />
+            </label>
+          </>
+        )}
+        {applyError && (
+          <p role="alert" className="text-sm text-danger">
+            {applyError}
+          </p>
+        )}
+      </div>
+    </Modal>
   )
 }
 

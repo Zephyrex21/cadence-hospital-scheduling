@@ -38,14 +38,20 @@ _ACTIVE = (
 )
 
 
-def _day_bounds(day: datetime) -> tuple[datetime, datetime]:
-    start = day.replace(hour=0, minute=0, second=0, microsecond=0)
-    return start, start + timedelta(days=1)
+# The engine plans over a rolling horizon around "now" rather than a UTC calendar
+# day: a clinic day (and a night shift) routinely straddles UTC midnight, and an
+# appointment just after midnight must still be visible to a placement just before.
+_HORIZON_BEFORE = timedelta(hours=12)
+_HORIZON_AFTER = timedelta(hours=36)
 
 
-def eligible_doctor_ids(db: Session, specialty: str, day: datetime) -> list[int]:
-    """Doctors of the given specialty who have a shift on ``day``."""
-    lo, hi = _day_bounds(day)
+def _horizon(now: datetime) -> tuple[datetime, datetime]:
+    return now - _HORIZON_BEFORE, now + _HORIZON_AFTER
+
+
+def eligible_doctor_ids(db: Session, specialty: str, now: datetime) -> list[int]:
+    """Doctors of the given specialty with a shift within the planning horizon."""
+    lo, hi = _horizon(now)
     rows = db.execute(
         select(User.id)
         .join(DoctorProfile, DoctorProfile.user_id == User.id)
@@ -62,9 +68,9 @@ def eligible_doctor_ids(db: Session, specialty: str, day: datetime) -> list[int]
 
 
 def active_appointments(
-    db: Session, doctor_ids: list[int], day: datetime, *, for_update: bool = False
+    db: Session, doctor_ids: list[int], now: datetime, *, for_update: bool = False
 ) -> list[Appointment]:
-    lo, hi = _day_bounds(day)
+    lo, hi = _horizon(now)
     if not doctor_ids:
         return []
     stmt = select(Appointment).where(
@@ -74,19 +80,19 @@ def active_appointments(
         Appointment.scheduled_end > lo,
     )
     if for_update:
-        stmt = stmt.with_for_update()
+        stmt = stmt.with_for_update(of=Appointment)
     return list(db.scalars(stmt.order_by(Appointment.doctor_id, Appointment.scheduled_start)))
 
 
 def build_engine_state(
     db: Session,
     doctor_ids: list[int],
-    day: datetime,
+    now: datetime,
     appointments: list[Appointment],
     *,
     emergency_patient_id: int | None = None,
 ) -> EngineState:
-    lo, hi = _day_bounds(day)
+    lo, hi = _horizon(now)
     shifts: dict[int, tuple[Interval, ...]] = {}
     for doctor_id in doctor_ids:
         rows = db.scalars(
@@ -163,6 +169,26 @@ def state_fingerprint(appointments: list[Appointment]) -> str:
         for a in sorted(appointments, key=lambda a: a.id)
     )
     return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def plan_digest(plan: dict[str, Any] | None) -> str | None:
+    """Stable hash of what a reviewer actually approved: the placement and moves.
+
+    Commit recomputes the plan on the server's clock; if it no longer matches the
+    digest the reviewer saw, the commit is refused and the user re-plans.
+    """
+    if plan is None:
+        return None
+    placement = plan["placement"]
+    moves = sorted(plan["moves"], key=lambda m: m["appointment_id"])
+    canonical = f"{placement['doctor_id']}|{placement['start']}|{placement['end']}|" + "|".join(
+        f"{m['appointment_id']}:{m['to_start']}" for m in moves
+    )
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def request_hash(actor_id: int, patient_id: int, type_id: int, acuity: str) -> str:
+    return hashlib.sha256(f"{actor_id}|{patient_id}|{type_id}|{acuity}".encode()).hexdigest()
 
 
 def _delay_min(move: Move) -> float | None:

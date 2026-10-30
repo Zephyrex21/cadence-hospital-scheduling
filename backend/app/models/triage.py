@@ -36,3 +36,9 @@ class TriageAssessment(Base):
     assessed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, nullable=False, index=True
     )
+    # Set when this assessment has been used to schedule an emergency. One
+    # assessment authorises exactly one insertion; a new walk-in episode needs a
+    # fresh nurse assessment.
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

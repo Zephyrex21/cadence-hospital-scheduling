@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiFetch } from '../../lib/api'
-import type { Acuity, CommitResponse, LatestTriage, PlanResponse } from '../../types'
+import type {
+  Acuity,
+  CommitResponse,
+  EscalationOptions,
+  LatestTriage,
+  PlanResponse,
+} from '../../types'
 
 export interface PlanInput {
   patient_id: number
@@ -12,6 +18,7 @@ export interface PlanInput {
 
 export interface CommitInput extends PlanInput {
   fingerprint: string
+  plan_digest?: string
   idempotency_key?: string
 }
 
@@ -54,6 +61,36 @@ export function useCommitEmergency() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['schedule'] })
       void qc.invalidateQueries({ queryKey: ['slots'] })
+    },
+  })
+}
+
+/** The ranked options a clinician can choose between for an unresolved escalation. */
+export function useEscalationOptions(decisionId: number | null) {
+  return useQuery({
+    queryKey: ['escalation-options', decisionId],
+    enabled: decisionId != null,
+    queryFn: () => apiFetch<EscalationOptions>(`/escalations/${decisionId}/options`),
+    retry: false,
+  })
+}
+
+/** Apply a clinician-approved option (re-validated against the live schedule). */
+export function useApplyEscalation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, optionIndex, note }: { id: number; optionIndex: number; note?: string }) =>
+      apiFetch<CommitResponse>(`/escalations/${id}/apply`, {
+        method: 'POST',
+        body: { option_index: optionIndex, note: note || undefined },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['schedule'] })
+      void qc.invalidateQueries({ queryKey: ['slots'] })
+      void qc.invalidateQueries({ queryKey: ['dashboard'] })
+      void qc.invalidateQueries({ queryKey: ['decisions'] })
+      void qc.invalidateQueries({ queryKey: ['displacements'] })
+      void qc.invalidateQueries({ queryKey: ['queue'] })
     },
   })
 }

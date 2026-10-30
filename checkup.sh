@@ -2,7 +2,7 @@
 # Full project checkup: backend (ruff/mypy/pytest) + frontend (tsc/eslint/vitest).
 # Writes everything to checkup.log so results can be read without re-running.
 set +e
-ROOT="/c/Users/Zephyr/Desktop/SE"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG="$ROOT/checkup.log"
 : > "$LOG"
 exec >>"$LOG" 2>&1

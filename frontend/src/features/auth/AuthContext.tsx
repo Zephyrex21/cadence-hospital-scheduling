@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 
+import { AUTH_EXPIRED_EVENT } from '../../lib/api'
 import { clearTokens, getAccessToken, storeTokens } from '../../lib/auth-storage'
 import type { User } from '../../types'
 import { fetchMe, loginRequest } from './api'
@@ -54,6 +55,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const me = await fetchMe()
     setUser(me)
     setStatus('authenticated')
+  }, [])
+
+  // The API client fires this when a refresh fails; without it the UI would stay
+  // "signed in" while every request failed until the page was reloaded.
+  useEffect(() => {
+    const onExpired = () => {
+      setUser(null)
+      setStatus('anonymous')
+    }
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired)
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired)
   }, [])
 
   const logout = useCallback(() => {

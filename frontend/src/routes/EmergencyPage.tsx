@@ -17,7 +17,7 @@ import {
 } from '../features/emergency/api'
 import { ACUITY_LABEL, ACUITY_ORDER, ACUITY_TARGET } from '../features/emergency/format'
 import { PlanReview } from '../features/emergency/PlanReview'
-import { usePatients } from '../features/patients/api'
+import { PatientPicker } from '../components/PatientPicker'
 import { useAppointmentTypes } from '../features/schedule/api'
 import { formatTime } from '../features/schedule/timeline'
 import { ApiError } from '../lib/api'
@@ -31,7 +31,6 @@ function newIdempotencyKey(): string {
 export function EmergencyPage() {
   const { user } = useAuth()
   const { toast } = useToast()
-  const patients = usePatients('')
   const types = useAppointmentTypes()
   const triage = useRecordTriage()
   const plan = usePlanEmergency()
@@ -98,8 +97,9 @@ export function EmergencyPage() {
         patient_id: patientId,
         type_id: typeId,
         acuity: effectiveAcuity,
-        now: planData.now, // A4: commit against the instant the plan was computed
+        // The server clock is authoritative; the digest pins exactly what was reviewed.
         fingerprint: planData.fingerprint,
+        plan_digest: planData.plan_digest ?? undefined,
         idempotency_key: idemRef.current,
       })
       if (res.status === 'auto') {
@@ -114,7 +114,8 @@ export function EmergencyPage() {
         toast({
           tone: 'warning',
           title: 'Escalation recorded',
-          description: 'Routed to a senior clinician; the schedule was not changed.',
+          description:
+            'A nurse or administrator can now review and apply an option from the dashboard.',
         })
       }
       setCommitted(res)
@@ -146,9 +147,12 @@ export function EmergencyPage() {
       : plan.error
         ? 'Could not compute a plan.'
         : null
+  const staleCode =
+    commit.error instanceof ApiError
+      ? (commit.error.details as { code?: string } | undefined)?.code
+      : undefined
   const scheduleChanged =
-    commit.error instanceof ApiError &&
-    (commit.error.details as { code?: string } | undefined)?.code === 'schedule_changed'
+    staleCode === 'schedule_changed' || staleCode === 'plan_changed' || staleCode === 'plan_expired'
   const commitError = scheduleChanged
     ? null
     : commit.error instanceof ApiError
@@ -172,21 +176,7 @@ export function EmergencyPage() {
       {step === 1 && (
         <Card padded>
           <div className="flex flex-col gap-4">
-            <Select
-              label="Patient"
-              name="emergency-patient"
-              value={patientId ?? ''}
-              onChange={(e) => setPatientId(e.target.value ? Number(e.target.value) : null)}
-            >
-              <option value="" disabled>
-                Select patient
-              </option>
-              {(patients.data ?? []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.mrn})
-                </option>
-              ))}
-            </Select>
+            <PatientPicker name="emergency-patient" value={patientId} onChange={setPatientId} />
 
             <Select
               label="Appointment type"
@@ -281,14 +271,15 @@ export function EmergencyPage() {
             <div className="flex flex-col gap-3 border-t border-hairline pt-4">
               {scheduleChanged && (
                 <p role="status" className="text-sm text-warning">
-                  The schedule changed since you reviewed this plan. Re-plan to see the current
-                  impact.
+                  The schedule (or the proposed plan) changed since you reviewed it. Re-plan to
+                  see the current impact.
                 </p>
               )}
               {planData.decision.status !== 'auto' && !scheduleChanged && (
                 <p role="status" className="text-sm text-muted">
-                  No plan can be applied automatically. Record this to route it to a senior
-                  clinician — the schedule is left untouched.
+                  No plan can be applied automatically. Record the escalation; a nurse or
+                  administrator will then review the options and apply one from the dashboard.
+                  The schedule is left untouched until then.
                 </p>
               )}
               {commitError && (
@@ -384,7 +375,8 @@ function CommitResult({ result, onReset }: { result: CommitResponse; onReset: ()
               </p>
             ) : (
               <p className="font-medium text-ink">
-                Escalated to a clinician — nothing was auto-scheduled.
+                Escalated to a clinician — nothing was auto-scheduled yet. Open the dashboard
+                escalation inbox to review and apply an option.
               </p>
             )}
           </div>

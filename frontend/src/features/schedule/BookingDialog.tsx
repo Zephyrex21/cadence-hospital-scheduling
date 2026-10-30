@@ -6,7 +6,7 @@ import { Select } from '../../components/Select'
 import { Spinner } from '../../components/states'
 import { useToast } from '../../components/Toast'
 import { ApiError } from '../../lib/api'
-import { usePatients } from '../patients/api'
+import { PatientPicker } from '../../components/PatientPicker'
 import { useAppointmentTypes, useBookAppointment, useDoctors, useSlots } from './api'
 import { formatTime } from './timeline'
 
@@ -21,7 +21,6 @@ interface BookingDialogProps {
 export function BookingDialog({ date, defaultDoctorId, onClose, onBooked }: BookingDialogProps) {
   const doctors = useDoctors()
   const types = useAppointmentTypes()
-  const patients = usePatients('')
 
   const [patientId, setPatientId] = useState<number | null>(null)
   const [doctorId, setDoctorId] = useState<number | null>(defaultDoctorId ?? null)
@@ -70,21 +69,7 @@ export function BookingDialog({ date, defaultDoctorId, onClose, onBooked }: Book
       }
     >
       <div className="flex flex-col gap-4">
-        <Select
-          label="Patient"
-          name="booking-patient"
-          value={patientId ?? ''}
-          onChange={(e) => setPatientId(e.target.value ? Number(e.target.value) : null)}
-        >
-          <option value="" disabled>
-            Select patient
-          </option>
-          {(patients.data ?? []).map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name} ({p.mrn})
-            </option>
-          ))}
-        </Select>
+        <PatientPicker name="booking-patient" value={patientId} onChange={setPatientId} />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Select

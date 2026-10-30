@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 from app.core.enums import Acuity
-from app.scheduling.availability import Interval, fits_in_any
+from app.scheduling.availability import Interval, fits_in_any, has_conflict
 from app.scheduling.engine.constraints import candidate_rejections, escalation_reasons
 from app.scheduling.engine.cost import delay_minutes, plan_cost
 from app.scheduling.engine.types import (
@@ -55,6 +55,27 @@ def _doctor_appointments(state: EngineState, doctor_id: int) -> list[EngineAppoi
         a for a in state.appointments if a.doctor_id == doctor_id and a.occupies_time
     ]
     return sorted(appts, key=lambda a: (a.start, a.id))
+
+
+def _patient_busy_for(
+    state: EngineState, doctor_id: int, appts: list[EngineAppointment]
+) -> dict[int, tuple[Interval, ...]]:
+    """Per-candidate "this patient is already somewhere else" intervals.
+
+    ``state.patient_busy`` carries appointments on doctors *outside* the eligible
+    set. Appointments on the *other eligible doctors* are not part of this
+    doctor's ripple, so they stay put and must also count as busy — otherwise a
+    ripple (or the emergency itself) could put one patient in two rooms at once.
+    Appointments on this doctor are excluded: the ripple already keeps them
+    mutually non-overlapping.
+    """
+    busy: dict[int, list[Interval]] = {
+        pid: list(ivs) for pid, ivs in state.patient_busy.items()
+    }
+    for a in state.appointments:
+        if a.doctor_id != doctor_id and a.occupies_time:
+            busy.setdefault(a.patient_id, []).append(a.interval)
+    return {pid: tuple(ivs) for pid, ivs in busy.items()}
 
 
 def _anchors(
@@ -87,6 +108,7 @@ def _build_candidate(
     *,
     enforce_window: bool,
     patient_busy: Mapping[int, tuple[Interval, ...]],
+    own_same_doctor: tuple[Interval, ...] = (),
 ) -> CandidatePlan | None:
     """Build one candidate by inserting at ``start`` and rippling later appts.
 
@@ -135,6 +157,10 @@ def _build_candidate(
         enforce_window=enforce_window,
         patient_busy=patient_busy,
     )
+    # The emergency patient must not overlap any of their *own* active
+    # appointments with this doctor either (including ones this plan would move).
+    if has_conflict(emergency, list(own_same_doctor)) and "patient_double_booked" not in rejections:
+        rejections = (*rejections, "patient_double_booked")
     cost = plan_cost(tuple(moves), displaced, params)
     return CandidatePlan(
         placement=placement,
@@ -151,6 +177,41 @@ def _total_delay(plan: CandidatePlan) -> float:
 
 def _rank_key(plan: CandidatePlan) -> tuple[float, datetime, float, int]:
     return (plan.cost, plan.placement.start, _total_delay(plan), plan.placement.doctor_id)
+
+
+def plan_at(
+    state: EngineState,
+    request: EngineRequest,
+    doctor_id: int,
+    start: datetime,
+    params: EngineParameters | None = None,
+    *,
+    enforce_window: bool = False,
+) -> CandidatePlan | None:
+    """Rebuild and re-validate the single candidate that starts at ``start`` on
+    ``doctor_id`` against the *current* state.
+
+    Used when a human approves a previously proposed (escalated) option: the plan
+    is recomputed rather than trusted, so every hard constraint is re-checked.
+    Returns None when ``start`` is no longer a valid anchor.
+    """
+    params = params or EngineParameters()
+    shifts = tuple(state.shifts.get(doctor_id, ()))
+    if not shifts:
+        return None
+    appts = _doctor_appointments(state, doctor_id)
+    return _build_candidate(
+        doctor_id,
+        start,
+        timedelta(minutes=request.duration_min),
+        appts,
+        shifts,
+        request,
+        params,
+        enforce_window=enforce_window,
+        patient_busy=_patient_busy_for(state, doctor_id, appts),
+        own_same_doctor=tuple(a.interval for a in appts if a.patient_id == request.patient_id),
+    )
 
 
 def insert_emergency(
@@ -171,6 +232,10 @@ def insert_emergency(
             continue
         appts = _doctor_appointments(state, doctor_id)
         duration = timedelta(minutes=request.duration_min)
+        busy_for_doctor = _patient_busy_for(state, doctor_id, appts)
+        own_same_doctor = tuple(
+            a.interval for a in appts if a.patient_id == request.patient_id
+        )
         for anchor in _anchors(request.now, shifts, appts, duration, params):
             built = _build_candidate(
                 doctor_id,
@@ -181,7 +246,8 @@ def insert_emergency(
                 request,
                 params,
                 enforce_window=enforce_window,
-                patient_busy=state.patient_busy,
+                patient_busy=busy_for_doctor,
+                own_same_doctor=own_same_doctor,
             )
             if built is not None:
                 candidates.append(built)

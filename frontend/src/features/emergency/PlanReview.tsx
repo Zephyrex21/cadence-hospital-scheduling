@@ -45,7 +45,7 @@ export function PlanReview({ plan }: { plan: PlanResponse }) {
       ) : decision.alternatives.length > 0 ? (
         <div className="flex flex-col gap-3">
           <p className="text-sm text-muted">
-            No plan can be applied automatically. Closest options for a clinician to weigh:
+            No plan can be applied automatically. Record the escalation, then a nurse or administrator can review and apply one of these options:
           </p>
           {decision.alternatives.slice(0, 3).map((alt, i) => (
             <div key={i} className="rounded-card border border-hairline bg-canvas p-3">
@@ -62,7 +62,7 @@ export function PlanReview({ plan }: { plan: PlanResponse }) {
   )
 }
 
-function PlanBody({
+export function PlanBody({
   plan,
   details,
   doctorNames,

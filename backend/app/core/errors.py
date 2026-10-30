@@ -49,10 +49,21 @@ class ForbiddenError(AppError):
     code = "forbidden"
 
 
+class RateLimitError(AppError):
+    status_code = 429
+    code = "rate_limited"
+
+    def __init__(self, message: str, *, retry_after: int) -> None:
+        super().__init__(message, details={"retry_after_sec": retry_after})
+        self.retry_after = retry_after
+
+
 def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
+    headers = {"Retry-After": str(exc.retry_after)} if isinstance(exc, RateLimitError) else None
     return JSONResponse(
         status_code=exc.status_code,
         content={
             "error": {"code": exc.code, "message": exc.message, "details": exc.details}
         },
+        headers=headers,
     )

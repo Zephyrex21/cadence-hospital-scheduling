@@ -104,7 +104,7 @@ def change_consultation_status(
     actor: User,
     expected_version: int | None = None,
 ) -> Appointment:
-    appt = db.get(Appointment, appointment_id, with_for_update=True)
+    appt = db.get(Appointment, appointment_id, with_for_update={"of": Appointment})
     if appt is None:
         raise NotFoundError("Appointment not found")
 
