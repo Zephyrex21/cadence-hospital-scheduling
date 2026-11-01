@@ -14,7 +14,7 @@ async function signIn(page: Page): Promise<void> {
   await page.fill('input[name="email"]', ADMIN.email)
   await page.fill('input[name="password"]', ADMIN.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening)/ })).toBeVisible()
 }
 
 test('book → emergency displacement → audit', async ({ page }) => {
@@ -25,9 +25,9 @@ test('book → emergency displacement → audit', async ({ page }) => {
   await page.getByRole('button', { name: 'Book appointment' }).click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
-  await dialog.getByLabel('Patient').selectOption({ label: 'Spare Sam (CAD-E0002)' })
-  await dialog.getByLabel('Doctor').selectOption({ label: 'Dr. Able Cardio' })
-  await dialog.getByLabel('Type').selectOption({ label: 'General consultation · 30m' })
+  await dialog.getByLabel('Patient').selectOption({ label: 'Arjun Reddy (CAD-E0002)' })
+  await dialog.getByLabel('Doctor').selectOption({ label: 'Dr. Rohit Bansal' })
+  await dialog.getByLabel('Type').selectOption({ label: 'General OPD consultation · 30m' })
   const firstSlot = dialog.locator('button[aria-pressed]').first()
   await expect(firstSlot).toBeVisible()
   await firstSlot.click()
@@ -36,8 +36,8 @@ test('book → emergency displacement → audit', async ({ page }) => {
 
   // 2. Triage + schedule an emergency walk-in (acuity A2 by default).
   await page.getByRole('link', { name: 'Emergency' }).click()
-  await page.getByLabel('Patient').selectOption({ label: 'Walkin Wendy (CAD-E0003)' })
-  await page.getByLabel('Appointment type').selectOption({ label: 'General consultation · 30m' })
+  await page.getByLabel('Patient').selectOption({ label: 'Kavya Menon (CAD-E0003)' })
+  await page.getByLabel('Appointment type').selectOption({ label: 'General OPD consultation · 30m' })
   await page.getByLabel('Chief complaint').fill('Chest pain, 20 minutes')
   await page.getByRole('button', { name: 'Review plan' }).click()
 
@@ -50,7 +50,7 @@ test('book → emergency displacement → audit', async ({ page }) => {
 
   // 3. The displacement is recorded and traceable.
   await page.getByRole('link', { name: 'Displacements' }).click()
-  await expect(page.getByText('Booked Barbara')).toBeVisible()
+  await expect(page.getByText('Meera Krishnan')).toBeVisible()
 
   // 4. The decision and audit trail are visible to an administrator.
   await page.getByRole('link', { name: 'Decisions & audit' }).click()

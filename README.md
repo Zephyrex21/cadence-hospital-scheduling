@@ -3,7 +3,7 @@
 Dynamic, priority-aware appointment scheduling for public hospitals under resource
 contention and walk-in emergency interruptions.
 
-> **Synthetic demo data only — not for clinical use.** Cadence is a scheduling and
+> **Fictitious demo data only — not for clinical use.** Cadence is a scheduling and
 > operations tool. It is **not** a diagnostic or clinical-decision system. Triage acuity
 > is always recorded by a human nurse; the engine only arranges time and resources.
 
@@ -44,12 +44,17 @@ the signature flow).
 - **Operational dashboard** — live workload tiles, waiting-by-acuity, per-doctor running
   delay, and an **escalation inbox** that lists every *unresolved* escalation (any day) with a
   Resolve action (nurse / administrator, note required — recorded to the audit log).
-- **Polished, premium UI** ("Clinical Calm 2.0") — light **and dark** mode (system default,
-  persisted), self-hosted variable fonts, frosted-glass shell/modals, purposeful motion
-  (count-up tiles, animated schedule/queue, an emergency before/after mini-timeline), a custom
-  inline-SVG illustration set, and one restrained 3D hero on the login screen. Responsive
-  (mobile drawer), keyboard-accessible, WCAG-AA, and fully `prefers-reduced-motion` safe. See
-  [docs/UI_JOURNAL.md](docs/UI_JOURNAL.md).
+- **Apple-inspired premium UI** ("Cream & Moon") — a warm **cream** light theme with a soft
+  shine and a **moon-black** dark theme (light / system / dark, persisted, no flash on load), one
+  Apple-blue accent, frosted-glass floating sidebar and top bar, SF-style type (real SF Pro on
+  Apple devices, Inter elsewhere), Phosphor icons, a lightweight animated login hero (no WebGL),
+  and purposeful motion that respects `prefers-reduced-motion`. Responsive, keyboard-accessible,
+  and WCAG-AA — enforced by an automated contrast test over every text/background token pair in
+  both themes. See [docs/REDESIGN.md](docs/REDESIGN.md).
+- **Built for an Indian clinic** — all times shown in **IST** (12-hour clock, day-first dates,
+  en-IN number grouping); "today", the schedule day and the queue day follow the clinic timezone;
+  Indian demo staff, doctors and patients; and a richer patient record (mobile, city, blood
+  group, emergency contact, notes) that accepts any name, including Devanagari.
 
 ## Stack
 
@@ -85,7 +90,7 @@ echo 'CADENCE_DATABASE_URL=sqlite+pysqlite:///./cadence.db' > .env
 
 uv sync --extra dev                       # install dependencies
 uv run alembic upgrade head               # create the schema
-uv run python -m app.seed                 # load synthetic demo data (idempotent)
+uv run python -m app.seed                 # load the Indian demo data (idempotent)
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
@@ -186,7 +191,7 @@ pnpm run e2e
 │   │   ├── schemas/         Pydantic request/response models
 │   │   ├── scheduling/      pure engine + availability/queue/dashboard logic
 │   │   ├── services/        transactional business logic
-│   │   ├── seed.py          synthetic demo data
+│   │   ├── seed.py          Indian demo data (idempotent upserts)
 │   │   └── e2e_seed.py/e2e_server.py   deterministic data + launcher for the E2E
 │   ├── alembic/             database migrations
 │   └── tests/               pytest suite
@@ -232,7 +237,13 @@ pnpm run e2e
 
 ## Notes
 
-- All timestamps are stored in **UTC**; `CADENCE_CLINIC_TIMEZONE` is for display only.
+- All timestamps are stored in **UTC**. `CADENCE_CLINIC_TIMEZONE` (default `Asia/Kolkata`) decides
+  what "today" means on the backend; the UI formats everything in IST via `src/lib/time.ts`.
+- **Refreshing the demo data on a host with no shell** (e.g. Render free tier): set
+  `CADENCE_SEED_DEMO_ON_START=true` (and `CADENCE_SEED_PASSWORD` in production) and redeploy. It
+  runs the idempotent seed at startup: existing demo records are updated *in place* (old
+  placeholder names become the Indian ones), past unattended demo appointments are closed out,
+  new sample appointments are placed in the future, and patients you registered are untouched.
 - Configuration is via environment variables prefixed `CADENCE_` (see `.env.example`),
   read from a `backend/.env` file if present.
 - The seed is idempotent — safe to re-run. It creates shifts for the next 14 days, so a

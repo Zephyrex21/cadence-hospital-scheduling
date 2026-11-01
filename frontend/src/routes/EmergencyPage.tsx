@@ -1,10 +1,11 @@
-import { Check, CheckCircle2, ChevronLeft } from 'lucide-react'
+import { Check, CheckCircle2, ChevronLeft } from '../components/icons'
 import { m } from 'framer-motion'
 import { useRef, useState } from 'react'
 
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { Select } from '../components/Select'
+import { Textarea } from '../components/Textarea'
 import { useToast } from '../components/Toast'
 import { useAuth } from '../features/auth/AuthContext'
 import { canRecordTriage } from '../features/auth/roles'
@@ -231,19 +232,14 @@ export function EmergencyPage() {
             )}
 
             {canTriage && (
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="emergency-complaint" className="text-sm font-medium text-ink">
-                  Chief complaint
-                </label>
-                <textarea
-                  id="emergency-complaint"
-                  value={complaint}
-                  onChange={(e) => setComplaint(e.target.value)}
-                  rows={2}
-                  placeholder="e.g. Chest pain, 20 min"
-                  className="rounded-control border border-hairline bg-surface px-3 py-2 text-sm text-ink shadow-xs outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/30"
-                />
-              </div>
+              <Textarea
+                label="Chief complaint"
+                id="emergency-complaint"
+                value={complaint}
+                onChange={(e) => setComplaint(e.target.value)}
+                rows={2}
+                placeholder="e.g. Chest pain for 20 minutes"
+              />
             )}
 
             {!canTriage && (
@@ -271,15 +267,15 @@ export function EmergencyPage() {
             <div className="flex flex-col gap-3 border-t border-hairline pt-4">
               {scheduleChanged && (
                 <p role="status" className="text-sm text-warning">
-                  The schedule (or the proposed plan) changed since you reviewed it. Re-plan to
-                  see the current impact.
+                  The schedule (or the proposed plan) changed since you reviewed it. Re-plan to see
+                  the current impact.
                 </p>
               )}
               {planData.decision.status !== 'auto' && !scheduleChanged && (
                 <p role="status" className="text-sm text-muted">
                   No plan can be applied automatically. Record the escalation; a nurse or
-                  administrator will then review the options and apply one from the dashboard.
-                  The schedule is left untouched until then.
+                  administrator will then review the options and apply one from the dashboard. The
+                  schedule is left untouched until then.
                 </p>
               )}
               {commitError && (
@@ -335,9 +331,7 @@ function Stepper({ current }: { current: number }) {
             >
               {state === 'done' ? <Check size={14} aria-hidden /> : n}
             </span>
-            <span
-              className={`text-sm font-medium ${state === 'todo' ? 'text-muted' : 'text-ink'}`}
-            >
+            <span className={`text-sm font-medium ${state === 'todo' ? 'text-muted' : 'text-ink'}`}>
               {label}
             </span>
             {i < steps.length - 1 && <span className="mx-1 h-px w-5 bg-hairline sm:w-8" />}

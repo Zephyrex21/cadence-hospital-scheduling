@@ -30,6 +30,10 @@ from app.core.migrate import run_migrations
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if settings.auto_migrate:
         run_migrations()
+    if settings.seed_demo_on_start:
+        from app.seed import refresh_demo_data
+
+        refresh_demo_data()
     yield
 
 

@@ -8,10 +8,10 @@ import {
 } from './format'
 
 describe('history formatting', () => {
-  it('formats a full UTC timestamp regardless of locale', () => {
+  it('formats a full timestamp in clinic time (IST)', () => {
     const out = formatDateTime('2026-10-13T09:05:00Z')
     expect(out).toContain('13 Oct')
-    expect(out).toContain('09:05')
+    expect(out).toContain('2:35 pm')
   })
 
   it('labels and tones decision status', () => {

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from '../components/icons'
 import { useEffect, useState } from 'react'
 
 import { Button } from '../components/Button'
@@ -10,12 +10,9 @@ import { useDoctors, useSchedule } from '../features/schedule/api'
 import { BookingDialog } from '../features/schedule/BookingDialog'
 import { ScheduleTimeline } from '../features/schedule/ScheduleTimeline'
 import { todayIso } from '../features/schedule/timeline'
+import { addDays, formatDateLong } from '../lib/time'
 
-function shiftDay(iso: string, delta: number): string {
-  const d = new Date(`${iso}T00:00:00Z`)
-  d.setUTCDate(d.getUTCDate() + delta)
-  return d.toISOString().slice(0, 10)
-}
+const shiftDay = addDays
 
 export function SchedulePage() {
   const { user } = useAuth()
@@ -45,27 +42,33 @@ export function SchedulePage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-control border border-hairline bg-surface shadow-xs">
+          <div className="flex items-center rounded-pill border border-hairline bg-surface p-0.5 shadow-xs">
             <button
               onClick={() => setDate(shiftDay(date, -1))}
               aria-label="Previous day"
-              className="rounded-l-control px-2 py-2 text-muted transition-colors hover:bg-canvas hover:text-ink"
+              className="rounded-pill p-2 text-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={16} weight="bold" />
             </button>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              aria-label="Schedule date"
-              className="border-x border-hairline bg-transparent px-3 py-1.5 text-sm tabular-nums text-ink outline-none focus:ring-2 focus:ring-brand/30"
-            />
+            {/* A formatted label over a transparent native date input: Indian date
+                format on screen, the platform's own date picker on click. */}
+            <label className="relative cursor-pointer rounded-pill px-3.5 py-1.5 text-sm font-medium tabular-nums text-ink transition-colors hover:bg-ink/5 focus-within:ring-2 focus-within:ring-brand/50">
+              {formatDateLong(`${date}T12:00:00Z`)}
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => e.target.value && setDate(e.target.value)}
+                onClick={(e) => e.currentTarget.showPicker?.()}
+                aria-label="Schedule date"
+                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+              />
+            </label>
             <button
               onClick={() => setDate(shiftDay(date, 1))}
               aria-label="Next day"
-              className="rounded-r-control px-2 py-2 text-muted transition-colors hover:bg-canvas hover:text-ink"
+              className="rounded-pill p-2 text-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={16} weight="bold" />
             </button>
           </div>
           {!isToday && (

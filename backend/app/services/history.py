@@ -7,12 +7,13 @@ staff can see what moved and administrators can see exactly why.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.clock import clinic_day_bounds
 from app.core.enums import AuditAction
 from app.core.errors import ConflictError, NotFoundError
 from app.models.appointment import Appointment
@@ -25,11 +26,6 @@ from app.models.user import User
 from app.services.audit import record_audit
 
 _MAX_ROWS = 200
-
-
-def _day_bounds(day: datetime) -> tuple[datetime, datetime]:
-    start = day.replace(hour=0, minute=0, second=0, microsecond=0)
-    return start, start + timedelta(days=1)
 
 
 def _delay_min(from_start: datetime, to_start: datetime) -> int:
@@ -47,7 +43,7 @@ def _user_names(db: Session, ids: set[int]) -> dict[int, str]:
 def list_displacements(db: Session, day: datetime | None = None) -> list[dict[str, Any]]:
     stmt = select(AppointmentDisplacement)
     if day is not None:
-        lo, hi = _day_bounds(day)
+        lo, hi = clinic_day_bounds(day)
         stmt = stmt.where(
             AppointmentDisplacement.created_at >= lo, AppointmentDisplacement.created_at < hi
         )
@@ -79,7 +75,7 @@ def list_displacements(db: Session, day: datetime | None = None) -> list[dict[st
 def list_decisions(db: Session, day: datetime | None = None) -> list[dict[str, Any]]:
     stmt = select(SchedulingDecision)
     if day is not None:
-        lo, hi = _day_bounds(day)
+        lo, hi = clinic_day_bounds(day)
         stmt = stmt.where(
             SchedulingDecision.created_at >= lo, SchedulingDecision.created_at < hi
         )

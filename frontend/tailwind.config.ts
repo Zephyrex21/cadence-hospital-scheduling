@@ -1,7 +1,7 @@
 import type { Config } from 'tailwindcss'
 
 /**
- * Cadence "Clinical Calm 2.0" design system.
+ * Cadence "Cream & Moon" design system (Apple-inspired).
  *
  * Palette values live as CSS variables in `src/styles/tokens.css` so light/dark
  * themes share one source of truth; this file maps them to Tailwind utilities.
@@ -30,7 +30,9 @@ const config: Config = {
           DEFAULT: 'rgb(var(--c-brand) / <alpha-value>)',
           strong: 'rgb(var(--c-brand-strong) / <alpha-value>)',
           accent: 'rgb(var(--c-brand-accent) / <alpha-value>)',
+          fill: 'rgb(var(--c-brand-fill) / <alpha-value>)',
         },
+        'on-brand': 'rgb(var(--c-on-brand) / <alpha-value>)',
         success: 'rgb(var(--c-success) / <alpha-value>)',
         warning: 'rgb(var(--c-warning) / <alpha-value>)',
         danger: 'rgb(var(--c-danger) / <alpha-value>)',
@@ -44,36 +46,60 @@ const config: Config = {
         },
       },
       backgroundImage: {
+        // The Apple-blue "shine": lit from above, deeper at the base.
         'brand-gradient':
-          'linear-gradient(135deg, rgb(var(--c-brand-strong)) 0%, rgb(var(--c-brand)) 45%, rgb(var(--c-brand-accent)) 100%)',
+          'linear-gradient(180deg, rgb(var(--c-brand-accent)) 0%, rgb(var(--c-brand-fill)) 100%)',
         'brand-glow':
-          'radial-gradient(60% 60% at 50% 0%, rgb(var(--c-brand-accent) / 0.18) 0%, transparent 70%)',
+          'radial-gradient(60% 60% at 50% 0%, rgb(var(--c-brand-accent) / 0.16) 0%, transparent 70%)',
+        sheen: 'linear-gradient(180deg, rgb(255 255 255 / 0.28) 0%, rgb(255 255 255 / 0) 55%)',
       },
       fontFamily: {
-        sans: ['Inter Variable', 'Inter', 'system-ui', 'sans-serif'],
-        display: ['Geist Variable', 'Geist', 'Inter Variable', 'system-ui', 'sans-serif'],
-        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+        // Real SF Pro on Apple devices; Inter (bundled, metrically close) elsewhere.
+        sans: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'SF Pro Text',
+          'Inter Variable',
+          'Inter',
+          'system-ui',
+          'sans-serif',
+        ],
+        display: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'SF Pro Display',
+          'Inter Variable',
+          'Inter',
+          'system-ui',
+          'sans-serif',
+        ],
+        mono: ['ui-monospace', 'SF Mono', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       fontSize: {
-        'display-lg': ['2.5rem', { lineHeight: '1.1', letterSpacing: '-0.02em' }],
-        display: ['2rem', { lineHeight: '1.15', letterSpacing: '-0.02em' }],
-        title: ['1.375rem', { lineHeight: '1.25', letterSpacing: '-0.01em' }],
+        'display-lg': ['3rem', { lineHeight: '1.05', letterSpacing: '-0.035em' }],
+        display: ['2.25rem', { lineHeight: '1.1', letterSpacing: '-0.03em' }],
+        title: ['1.625rem', { lineHeight: '1.2', letterSpacing: '-0.022em' }],
+        headline: ['1.0625rem', { lineHeight: '1.3', letterSpacing: '-0.012em' }],
       },
       borderRadius: {
-        control: '8px',
-        card: '14px',
-        modal: '20px',
+        control: '12px',
+        card: '20px',
+        modal: '28px',
         pill: '9999px',
       },
       boxShadow: {
-        xs: '0 1px 2px rgb(15 23 42 / 0.05)',
-        card: '0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06)',
-        sm: '0 1px 2px rgb(15 23 42 / 0.04), 0 2px 6px rgb(15 23 42 / 0.06)',
-        md: '0 2px 4px rgb(15 23 42 / 0.05), 0 8px 20px -4px rgb(15 23 42 / 0.10)',
-        lg: '0 8px 16px -4px rgb(15 23 42 / 0.10), 0 24px 48px -12px rgb(15 23 42 / 0.18)',
-        raised: '0 4px 12px rgb(15 23 42 / 0.08), 0 2px 4px rgb(15 23 42 / 0.04)',
-        'glow-brand': '0 0 0 1px rgb(var(--c-brand) / 0.25), 0 10px 30px -8px rgb(var(--c-brand) / 0.45)',
-        'glow-success': '0 0 0 1px rgb(var(--c-success) / 0.35), 0 0 22px -6px rgb(var(--c-success) / 0.5)',
+        // Layered, warm-tinted shadows + a 1px top highlight (the "shine").
+        xs: '0 1px 2px rgb(var(--shadow-rgb) / 0.06)',
+        card: '0 1px 2px rgb(var(--shadow-rgb) / 0.04), 0 6px 18px -6px rgb(var(--shadow-rgb) / 0.10), inset 0 1px 0 var(--hl)',
+        sm: '0 1px 2px rgb(var(--shadow-rgb) / 0.06), 0 3px 8px -2px rgb(var(--shadow-rgb) / 0.08)',
+        md: '0 2px 4px rgb(var(--shadow-rgb) / 0.05), 0 12px 28px -8px rgb(var(--shadow-rgb) / 0.14)',
+        lg: '0 8px 20px -6px rgb(var(--shadow-rgb) / 0.14), 0 32px 64px -16px rgb(var(--shadow-rgb) / 0.26)',
+        raised:
+          '0 4px 14px rgb(var(--shadow-rgb) / 0.10), 0 1px 3px rgb(var(--shadow-rgb) / 0.06), inset 0 1px 0 var(--hl)',
+        'glow-brand':
+          '0 0 0 1px rgb(var(--c-brand-fill) / 0.25), 0 10px 28px -8px rgb(var(--c-brand-fill) / 0.5)',
+        'glow-success':
+          '0 0 0 1px rgb(var(--c-success) / 0.35), 0 0 22px -6px rgb(var(--c-success) / 0.5)',
       },
       backdropBlur: {
         xs: '2px',
@@ -88,7 +114,7 @@ const config: Config = {
           to: { opacity: '1', transform: 'translateY(0)' },
         },
         'scale-in': {
-          from: { opacity: '0', transform: 'translateY(4px) scale(0.98)' },
+          from: { opacity: '0', transform: 'translateY(4px) scale(0.97)' },
           to: { opacity: '1', transform: 'translateY(0) scale(1)' },
         },
         'slide-in-left': {
@@ -98,13 +124,23 @@ const config: Config = {
         shimmer: {
           '100%': { transform: 'translateX(100%)' },
         },
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-8px)' },
+        },
+        drift: {
+          '0%, 100%': { transform: 'translate3d(0, 0, 0) scale(1)' },
+          '50%': { transform: 'translate3d(2%, -3%, 0) scale(1.06)' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 150ms ease-out-soft both',
-        'fade-in-up': 'fade-in-up 250ms ease-out-soft both',
-        'scale-in': 'scale-in 180ms ease-out-soft both',
-        'slide-in-left': 'slide-in-left 200ms ease-out-soft both',
+        'fade-in-up': 'fade-in-up 300ms ease-out-soft both',
+        'scale-in': 'scale-in 200ms ease-out-soft both',
+        'slide-in-left': 'slide-in-left 220ms ease-out-soft both',
         shimmer: 'shimmer 1.6s infinite',
+        float: 'float 7s ease-in-out infinite',
+        drift: 'drift 16s ease-in-out infinite',
       },
       transitionTimingFunction: {
         'ease-out-soft': 'cubic-bezier(0.16, 1, 0.3, 1)',

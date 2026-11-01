@@ -38,10 +38,11 @@ export function PatientPicker({ name, value, onChange }: PatientPickerProps) {
     <div className="flex flex-col gap-2">
       <Input
         label="Search by name or MRN"
+        labelHidden
         name={`${name}-search`}
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Type to narrow the list"
+        placeholder="Search by name, MRN, phone or city"
         autoComplete="off"
       />
       <Select

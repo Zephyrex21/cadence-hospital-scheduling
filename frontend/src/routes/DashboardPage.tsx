@@ -2,24 +2,46 @@ import { m } from 'framer-motion'
 import { useState } from 'react'
 
 import { Button } from '../components/Button'
+import {
+  ClockCounterClockwise,
+  Stethoscope,
+  UsersThree,
+  Warning,
+  type Icon,
+} from '../components/icons'
 import { Card, CardHeader, CardTitle } from '../components/Card'
 import { CountUp } from '../components/CountUp'
 import { IllustrationCalm } from '../components/illustrations'
 import { Modal } from '../components/Modal'
 import { Skeleton } from '../components/Skeleton'
+import { Textarea } from '../components/Textarea'
 import { ErrorState } from '../components/states'
 import { useToast } from '../components/Toast'
 import { useAuth } from '../features/auth/AuthContext'
 import { canRecordTriage, ROLE_LABELS } from '../features/auth/roles'
 import { formatRunningDelay, useDashboard } from '../features/dashboard/api'
 import { useApplyEscalation, useEscalationOptions } from '../features/emergency/api'
-import { ACUITY_LABEL, ACUITY_ORDER, acuityDotClass, reasonText } from '../features/emergency/format'
+import {
+  ACUITY_LABEL,
+  ACUITY_ORDER,
+  acuityDotClass,
+  reasonText,
+} from '../features/emergency/format'
 import { PlanBody } from '../features/emergency/PlanReview'
 import { formatDateTime } from '../features/history/format'
 import { useResolveEscalation } from '../features/history/api'
 import { ApiError } from '../lib/api'
+import { clinicMinutesOfDay, formatDateLong } from '../lib/time'
 import { fadeUp, staggerContainer } from '../motion'
 import type { DashboardSummary, EscalationItem } from '../types'
+
+/** "Good morning / afternoon / evening" by the clinic's local (IST) hour. */
+function greeting(): string {
+  const hour = Math.floor(clinicMinutesOfDay(new Date()) / 60)
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  return 'Good evening'
+}
 
 export function DashboardPage() {
   const { user } = useAuth()
@@ -28,11 +50,13 @@ export function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="font-display text-title font-semibold text-ink">
-          Welcome{user ? `, ${user.name.split(' ')[0]}` : ''}
+        <h2 className="font-display text-display font-semibold text-ink">
+          {greeting()}
+          {user ? `, ${user.name.replace(/^Dr\.?\s+/i, '').split(' ')[0]}` : ''}
         </h2>
-        <p className="text-sm text-muted">
-          {user ? ROLE_LABELS[user.role] : ''} · live hospital workload
+        <p className="mt-1 text-[15px] text-muted">
+          {user ? ROLE_LABELS[user.role] : ''} · live hospital workload ·{' '}
+          {formatDateLong(new Date())}
         </p>
       </div>
 
@@ -94,11 +118,12 @@ function DashboardBody({ data }: { data: DashboardSummary }) {
     >
       {/* Tiles */}
       <m.div variants={fadeUp} className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Tile label="Waiting" value={data.total_waiting} />
-        <Tile label="In consultation" value={data.in_progress} />
-        <Tile label="Displaced today" value={data.displaced_today} />
+        <Tile label="Waiting" value={data.total_waiting} icon={UsersThree} />
+        <Tile label="In consultation" value={data.in_progress} icon={Stethoscope} />
+        <Tile label="Displaced today" value={data.displaced_today} icon={ClockCounterClockwise} />
         <Tile
           label="Escalations"
+          icon={Warning}
           value={data.escalations_pending}
           tone={data.escalations_pending > 0 ? 'warning' : 'neutral'}
         />
@@ -218,12 +243,8 @@ function DashboardBody({ data }: { data: DashboardSummary }) {
         </m.div>
       </div>
 
-      {resolving && (
-        <ResolveDialog item={resolving} onClose={() => setResolving(null)} />
-      )}
-      {reviewing && (
-        <OptionsDialog item={reviewing} onClose={() => setReviewing(null)} />
-      )}
+      {resolving && <ResolveDialog item={resolving} onClose={() => setResolving(null)} />}
+      {reviewing && <OptionsDialog item={reviewing} onClose={() => setReviewing(null)} />}
     </m.div>
   )
 }
@@ -238,7 +259,11 @@ function OptionsDialog({ item, onClose }: { item: EscalationItem; onClose: () =>
 
   async function applyOption(index: number) {
     try {
-      const res = await apply.mutateAsync({ id: item.decision_id, optionIndex: index, note: note.trim() })
+      const res = await apply.mutateAsync({
+        id: item.decision_id,
+        optionIndex: index,
+        note: note.trim(),
+      })
       toast({
         tone: 'success',
         title: 'Emergency scheduled',
@@ -322,17 +347,12 @@ function OptionsDialog({ item, onClose }: { item: EscalationItem; onClose: () =>
                 )}
               </div>
             ))}
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium uppercase tracking-wide text-muted">
-                Note (optional, written to the audit trail)
-              </span>
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={2}
-                className="rounded-control border border-hairline bg-surface px-3 py-2 text-sm text-ink shadow-xs outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/30"
-              />
-            </label>
+            <Textarea
+              label="Note (optional, written to the audit trail)"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+            />
           </>
         )}
         {applyError && (
@@ -389,19 +409,14 @@ function ResolveDialog({ item, onClose }: { item: EscalationItem; onClose: () =>
           Record how <span className="font-medium text-ink">{item.patient_name}</span>&apos;s
           escalation was handled. This is written to the audit trail and clears it from the inbox.
         </p>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted">
-            Resolution note
-          </span>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            rows={3}
-            autoFocus
-            placeholder="e.g. Seen by the on-call physician; admitted directly."
-            className="rounded-control border border-hairline bg-surface px-3 py-2 text-sm text-ink shadow-xs outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/30"
-          />
-        </label>
+        <Textarea
+          label="Resolution note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={3}
+          autoFocus
+          placeholder="e.g. Seen by the on-call physician; admitted directly."
+        />
         {errorMessage && (
           <p role="alert" className="text-sm text-danger">
             {errorMessage}
@@ -416,7 +431,7 @@ function AcuityBar({ data }: { data: DashboardSummary }) {
   const total = data.total_waiting
   return (
     <div
-      className="flex h-3 overflow-hidden rounded-pill bg-canvas ring-1 ring-inset ring-hairline"
+      className="flex h-2.5 overflow-hidden rounded-pill bg-ink/[0.06]"
       role="img"
       aria-label={`Waiting by acuity: ${ACUITY_ORDER.map((a) => `${a.toUpperCase()} ${data.waiting_by_acuity[a] ?? 0}`).join(', ')}`}
     >
@@ -440,22 +455,36 @@ function AcuityBar({ data }: { data: DashboardSummary }) {
 function Tile({
   label,
   value,
+  icon: TileIcon,
   tone = 'neutral',
 }: {
   label: string
   value: number
+  icon: Icon
   tone?: 'neutral' | 'warning'
 }) {
   const warn = tone === 'warning' && value > 0
   return (
     <Card
       padded
-      className={`transition-colors ${warn ? 'border-warning/40' : ''}`}
+      className={`transition-all duration-300 ease-out-soft hover:-translate-y-0.5 hover:shadow-md ${
+        warn ? 'border-warning/40' : ''
+      }`}
     >
-      <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-[13px] font-medium text-muted">{label}</p>
+        <span
+          aria-hidden
+          className={`flex h-9 w-9 items-center justify-center rounded-control ${
+            warn ? 'bg-warning/10 text-warning' : 'bg-brand/10 text-brand'
+          }`}
+        >
+          <TileIcon size={20} weight="duotone" />
+        </span>
+      </div>
       <CountUp
         value={value}
-        className={`mt-1 block font-display text-3xl font-semibold tabular-nums ${
+        className={`mt-4 block font-display text-[2.5rem] font-semibold leading-none tracking-tight tabular-nums ${
           warn ? 'text-warning' : 'text-ink'
         }`}
       />

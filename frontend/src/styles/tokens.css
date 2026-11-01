@@ -1,42 +1,51 @@
 /*
- * Cadence design tokens — "Clinical Calm 2.0".
+ * Cadence design tokens — "Cream & Moon".
+ *
+ * Light = warm cream paper with a soft shine; Dark = moon-black (true black canvas,
+ * quiet raised surfaces). One Apple-blue accent carries every interactive element.
  * Channels are space-separated RGB so Tailwind's `<alpha-value>` works.
  * tokens.css + tailwind.config.ts are the single source of truth — no hardcoded
- * colours in components. Text/background pairings target WCAG AA.
+ * colours in components. Text/background pairings target WCAG AA (verified by
+ * `src/styles/contrast.test.ts`).
  */
 
 :root {
-  /* Neutrals */
-  --c-ink: 15 23 42; /* #0F172A — primary text */
-  --c-slate: 51 65 85; /* #334155 — secondary text */
-  --c-muted: 100 116 139; /* #64748B — tertiary text */
-  --c-hairline: 226 232 240; /* #E2E8F0 — borders */
-  --c-canvas: 246 248 251; /* app background (recessed) */
-  --c-surface: 255 255 255; /* cards */
-  --c-elevated: 255 255 255; /* popovers / menus / toasts (shadow lifts in light) */
-  --c-scrim: 15 23 42; /* modal/drawer backdrop — stays dark in both themes */
+  /* Neutrals — warm */
+  --c-ink: 29 29 31; /* #1D1D1F primary text */
+  --c-slate: 66 66 69; /* #424245 secondary text */
+  --c-muted: 104 104 109; /* #68686D tertiary text */
+  --c-hairline: 226 219 205; /* #E2DBCD borders */
+  --c-canvas: 246 242 233; /* #F6F2E9 cream app background */
+  --c-surface: 255 253 249; /* #FFFDF9 cards */
+  --c-elevated: 255 255 255; /* popovers / menus / toasts */
+  --c-scrim: 29 29 31; /* modal backdrop */
+  --c-hero: 246 242 233; /* login showcase panel */
 
-  /* Login showcase hero — intentionally fixed-dark in both themes so the frosted
-     time-blocks read against it (not a theme surface). */
-  --c-hero: 6 16 26; /* #06101A */
-
-  /* Brand — deep clinical teal + refined accent */
-  --c-brand: 14 124 134; /* #0E7C86 */
-  --c-brand-strong: 11 102 110; /* #0B666E — hover / gradient anchor */
-  --c-brand-accent: 20 184 166; /* #14B8A6 */
+  /* Brand — Apple blue */
+  --c-brand: 0 102 204; /* #0066CC links, text, icons */
+  --c-brand-strong: 0 83 168; /* #0053A8 hover */
+  --c-brand-accent: 41 151 255; /* #2997FF highlights / gradient top */
+  --c-brand-fill: 0 113 227; /* #0071E3 filled controls */
+  --c-on-brand: 255 255 255; /* text on filled controls */
 
   /* Semantic */
-  --c-success: 21 128 61; /* #15803D */
-  --c-warning: 180 83 9; /* #B45309 */
-  --c-danger: 185 28 28; /* #B91C1C */
-  --c-info: 37 99 235; /* #2563EB */
+  --c-success: 30 126 52; /* #1E7E34 */
+  --c-warning: 167 78 0; /* #A74E00 */
+  --c-danger: 200 0 20; /* #C80014 */
+  --c-info: 0 102 204;
 
   /* Acuity scale (always paired with a label + shape, never colour alone) */
-  --c-acuity-1: 185 28 28; /* A1 critical */
-  --c-acuity-2: 234 88 12; /* A2 emergent */
-  --c-acuity-3: 202 138 4; /* A3 urgent */
-  --c-acuity-4: 21 128 61; /* A4 semi-urgent */
-  --c-acuity-5: 37 99 235; /* A5 routine */
+  --c-acuity-1: 200 0 20; /* A1 critical */
+  --c-acuity-2: 214 90 0; /* A2 emergent */
+  --c-acuity-3: 176 122 0; /* A3 urgent */
+  --c-acuity-4: 30 126 52; /* A4 semi-urgent */
+  --c-acuity-5: 0 113 227; /* A5 routine */
+
+  /* Light & depth */
+  --shadow-rgb: 70 50 20; /* warm shadow tint */
+  --hl: rgb(255 255 255 / 0.9); /* 1px top highlight on lit surfaces */
+  --glow: 255 255 255; /* ambient wash behind the page */
+  --glow-alpha: 0.7;
 
   /* Motion */
   --dur-fast: 150ms;
@@ -47,28 +56,35 @@
 }
 
 .dark {
-  --c-ink: 241 245 249; /* #F1F5F9 */
-  --c-slate: 203 213 225; /* #CBD5E1 */
-  --c-muted: 148 163 184; /* #94A3B8 */
-  --c-hairline: 51 65 85; /* #334155 */
-  --c-canvas: 2 6 23; /* #020617 */
-  --c-surface: 15 23 42; /* #0F172A */
-  --c-elevated: 30 41 59; /* #1E293B — raised surfaces read above cards */
-  --c-scrim: 0 0 0; /* pure black scrim dims the dark app behind modals */
+  --c-ink: 245 245 247; /* #F5F5F7 */
+  --c-slate: 209 209 214; /* #D1D1D6 */
+  --c-muted: 152 152 160; /* #9898A0 */
+  --c-hairline: 44 44 48; /* #2C2C30 */
+  --c-canvas: 0 0 0; /* moon black */
+  --c-surface: 18 18 20; /* #121214 */
+  --c-elevated: 30 30 33; /* #1E1E21 */
+  --c-scrim: 0 0 0;
+  --c-hero: 0 0 0;
 
-  --c-brand: 45 212 191; /* lighter teal on dark */
-  --c-brand-strong: 20 184 166;
-  --c-brand-accent: 94 234 212;
+  --c-brand: 10 132 255; /* #0A84FF */
+  --c-brand-strong: 64 156 255; /* #409CFF hover (lighter on dark) */
+  --c-brand-accent: 100 210 255; /* #64D2FF */
+  --c-brand-fill: 10 105 220; /* #0A69DC filled controls (white text AA) */
+  --c-on-brand: 255 255 255;
 
-  /* Brighter semantic + acuity so text and tints keep AA contrast on dark surfaces */
-  --c-success: 74 222 128; /* #4ADE80 */
-  --c-warning: 251 191 36; /* #FBBF24 */
-  --c-danger: 248 113 113; /* #F87171 */
-  --c-info: 96 165 250; /* #60A5FA */
+  --c-success: 48 209 88; /* #30D158 */
+  --c-warning: 255 214 10; /* #FFD60A */
+  --c-danger: 255 105 97; /* #FF6961 */
+  --c-info: 100 210 255;
 
-  --c-acuity-1: 248 113 113;
-  --c-acuity-2: 251 146 60;
-  --c-acuity-3: 250 204 21;
-  --c-acuity-4: 74 222 128;
-  --c-acuity-5: 96 165 250;
+  --c-acuity-1: 255 105 97;
+  --c-acuity-2: 255 159 10;
+  --c-acuity-3: 255 214 10;
+  --c-acuity-4: 48 209 88;
+  --c-acuity-5: 10 132 255;
+
+  --shadow-rgb: 0 0 0;
+  --hl: rgb(255 255 255 / 0.07);
+  --glow: 10 132 255;
+  --glow-alpha: 0.13;
 }

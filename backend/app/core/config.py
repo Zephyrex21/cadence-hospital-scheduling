@@ -1,13 +1,14 @@
 """Application configuration.
 
 Settings are read from environment variables (prefixed ``CADENCE_``) and an optional
-``.env`` file. Storage is always UTC; ``clinic_timezone`` is for display only.
+``.env`` file. Storage is always UTC; ``clinic_timezone`` defines what "today" means.
 """
 
 from __future__ import annotations
 
 import logging
 import secrets
+from zoneinfo import ZoneInfo
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,7 +28,9 @@ class Settings(BaseSettings):
 
     app_name: str = "Cadence API"
     env: str = "development"
-    clinic_timezone: str = "UTC"
+    # The clinic's local timezone: "today", the schedule day and the queue day are
+    # computed in it. Storage stays UTC; the UI formats times in this zone too.
+    clinic_timezone: str = "Asia/Kolkata"
 
     # Comma-separated list of allowed CORS origins.
     cors_origins: str = "http://localhost:5173"
@@ -60,6 +63,11 @@ class Settings(BaseSettings):
     # E2E server (which build their own schema) turn it off.
     auto_migrate: bool = True
 
+    # Refresh the Indian demo data (names, doctors, shifts) every time the API
+    # starts. Idempotent upserts keyed by MRN / email, so existing records are
+    # updated in place — never wiped. For hosts with no shell (Render free tier).
+    seed_demo_on_start: bool = False
+
     # Login brute-force protection (per client-IP + email, and per email).
     login_max_attempts: int = 5
     login_window_sec: int = 15 * 60
@@ -67,6 +75,10 @@ class Settings(BaseSettings):
     # Password for seeded demo staff. Required in production (the well-known
     # demo password is only used for local development).
     seed_password: str | None = None
+
+    @property
+    def clinic_tz(self) -> ZoneInfo:
+        return ZoneInfo(self.clinic_timezone)
 
     @model_validator(mode="after")
     def _validate_secrets(self) -> Settings:

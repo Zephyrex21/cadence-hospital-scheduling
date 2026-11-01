@@ -1,4 +1,4 @@
-import { Lock } from 'lucide-react'
+import { Lock } from '../../components/icons'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -67,7 +67,7 @@ export function ScheduleTimeline({ doctors, appointments, nowIso }: ScheduleTime
             ))}
             {showNow && (
               <div
-                className="absolute -right-1 h-2 w-2 -translate-y-1/2 rounded-full bg-danger shadow-glow-success"
+                className="absolute -right-1 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-danger ring-2 ring-surface"
                 style={{ top: nowTop as number }}
                 aria-hidden
               />
@@ -78,7 +78,7 @@ export function ScheduleTimeline({ doctors, appointments, nowIso }: ScheduleTime
         {/* Doctor columns */}
         {doctors.map((doctor) => (
           <div key={doctor.id} className="flex-1 border-r border-hairline/60 last:border-0">
-            <div className="flex h-12 items-center justify-center border-b border-hairline bg-canvas px-3 text-center">
+            <div className="flex h-12 items-center justify-center border-b border-hairline bg-canvas/70 px-3 text-center">
               <span className="truncate font-display text-sm font-semibold text-ink">
                 {doctor.name}
               </span>
@@ -142,11 +142,11 @@ function AppointmentBlock({
   const locked = appointment.status === 'in_progress'
 
   const toneRing: Record<string, string> = {
-    info: 'border-info/30 bg-info/10 hover:bg-info/15',
-    success: 'border-success/40 bg-success/10 hover:bg-success/15',
-    warning: 'border-warning/40 bg-warning/10 hover:bg-warning/15',
-    danger: 'border-danger/40 bg-danger/10 hover:bg-danger/15',
-    neutral: 'border-hairline bg-canvas hover:bg-hairline/40',
+    info: 'border-info/20 border-l-info bg-info/10 hover:bg-info/[0.16]',
+    success: 'border-success/25 border-l-success bg-success/10 hover:bg-success/[0.16]',
+    warning: 'border-warning/25 border-l-warning bg-warning/10 hover:bg-warning/[0.16]',
+    danger: 'border-danger/25 border-l-danger bg-danger/10 hover:bg-danger/[0.16]',
+    neutral: 'border-hairline border-l-muted bg-canvas hover:bg-hairline/40',
   }
 
   return (
@@ -167,7 +167,7 @@ function AppointmentBlock({
         }
       }}
       aria-describedby={active ? `appt-desc-${appointment.id}` : undefined}
-      className={`absolute inset-x-1 overflow-hidden rounded-control border p-2 text-left outline-none transition-[background-color,box-shadow] duration-150 animate-scale-in focus-visible:ring-2 focus-visible:ring-brand/50 ${
+      className={`absolute inset-x-1.5 overflow-hidden rounded-[12px] border border-l-[3px] px-2.5 py-1.5 text-left outline-none transition-[background-color,box-shadow] duration-150 animate-scale-in focus-visible:ring-2 focus-visible:ring-brand/50 ${
         toneRing[tone]
       } ${locked ? 'shadow-glow-success' : ''}`}
       style={{ top, height: Math.max(height, 22) }}
@@ -199,7 +199,7 @@ function HoverCard({ appt, rect }: { appt: Appointment; rect: DOMRect }) {
     <div
       id={`appt-desc-${appt.id}`}
       style={{ ...style, width }}
-      className="pointer-events-none fixed z-[90] rounded-card border border-hairline bg-elevated p-3 shadow-lg animate-fade-in"
+      className="pointer-events-none fixed z-[90] glass rounded-card border border-hairline p-3.5 shadow-lg animate-fade-in"
       role="tooltip"
     >
       <div className="flex items-center justify-between gap-2">

@@ -16,7 +16,18 @@ export function useRegisterPatient() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (values: PatientFormValues) => {
-      const payload = { ...values, contact: values.contact?.trim() || null }
+      // Blank optional fields are sent as null so the record stays clean.
+      const clean = (v?: string) => v?.trim() || null
+      const payload = {
+        name: values.name.trim(),
+        date_of_birth: values.date_of_birth,
+        sex: values.sex,
+        contact: clean(values.contact),
+        city: clean(values.city),
+        blood_group: clean(values.blood_group),
+        emergency_contact: clean(values.emergency_contact),
+        notes: clean(values.notes),
+      }
       return apiFetch<Patient>('/patients', { method: 'POST', body: payload })
     },
     onSuccess: () => {

@@ -4,31 +4,41 @@ import {
   PX_PER_MIN,
   blockGeometry,
   computeWindow,
+  formatHour,
   formatTime,
   minutesFromDayStart,
   statusTone,
 } from './timeline'
 
-describe('timeline geometry', () => {
-  it('computes minutes from the 08:00 day start (UTC)', () => {
-    expect(minutesFromDayStart('2026-10-13T08:00:00Z')).toBe(0)
-    expect(minutesFromDayStart('2026-10-13T09:30:00Z')).toBe(90)
+// Clinic time is IST (UTC+5:30), so 02:30Z is 8:00 am on the clinic clock.
+describe('timeline geometry (IST)', () => {
+  it('computes minutes from the 8 am day start in clinic time', () => {
+    expect(minutesFromDayStart('2026-10-13T02:30:00Z')).toBe(0) // 8:00 am IST
+    expect(minutesFromDayStart('2026-10-13T04:00:00Z')).toBe(90) // 9:30 am IST
   })
 
   it('positions a block by start and duration', () => {
-    const g = blockGeometry('2026-10-13T09:00:00Z', '2026-10-13T09:30:00Z')
+    const g = blockGeometry('2026-10-13T03:30:00Z', '2026-10-13T04:00:00Z') // 9:00-9:30 am IST
     expect(g.top).toBeCloseTo(60 * PX_PER_MIN)
     expect(g.height).toBeCloseTo(30 * PX_PER_MIN)
   })
 
   it('clamps blocks that start before the visible window', () => {
-    const g = blockGeometry('2026-10-13T07:30:00Z', '2026-10-13T08:30:00Z')
+    const g = blockGeometry('2026-10-13T02:00:00Z', '2026-10-13T03:00:00Z') // 7:30-8:30 am IST
     expect(g.top).toBe(0)
     expect(g.height).toBeCloseTo(30 * PX_PER_MIN)
   })
 
-  it('formats time in UTC regardless of locale', () => {
-    expect(formatTime('2026-10-13T09:05:00Z')).toBe('09:05')
+  it('formats time as 12-hour clinic time', () => {
+    expect(formatTime('2026-10-13T09:05:00Z')).toBe('2:35 pm')
+    expect(formatTime('2026-10-13T18:30:00Z')).toBe('12:00 am') // IST midnight
+  })
+
+  it('formats hour labels', () => {
+    expect(formatHour(8)).toBe('8 am')
+    expect(formatHour(12)).toBe('12 pm')
+    expect(formatHour(0)).toBe('12 am')
+    expect(formatHour(24)).toBe('12 am')
   })
 
   it('maps in-progress to the success tone (protected consult)', () => {
@@ -36,23 +46,23 @@ describe('timeline geometry', () => {
     expect(statusTone('displaced')).toBe('danger')
   })
 
-  it('keeps the default 08:00-18:00 window when everything fits', () => {
+  it('keeps the default 8 am-8 pm window when everything fits', () => {
     const w = computeWindow([
-      { scheduled_start: '2026-10-13T09:00:00Z', scheduled_end: '2026-10-13T09:30:00Z' },
+      { scheduled_start: '2026-10-13T03:30:00Z', scheduled_end: '2026-10-13T04:00:00Z' },
     ])
-    expect(w).toEqual({ startHour: 8, endHour: 18 })
+    expect(w).toEqual({ startHour: 8, endHour: 20 })
   })
 
-  it('widens the window so late and overnight appointments stay visible', () => {
-    const late = { scheduled_start: '2026-10-13T19:00:00Z', scheduled_end: '2026-10-13T19:30:00Z' }
+  it('widens the window so late appointments stay visible', () => {
+    const late = { scheduled_start: '2026-10-13T15:30:00Z', scheduled_end: '2026-10-13T16:00:00Z' } // 9-9:30 pm IST
     const w = computeWindow([late])
-    expect(w.endHour).toBeGreaterThanOrEqual(20)
+    expect(w.endHour).toBeGreaterThanOrEqual(22)
     const g = blockGeometry(late.scheduled_start, late.scheduled_end, w)
     expect(g.height).toBeCloseTo(30 * PX_PER_MIN) // used to be 0 -> invisible
   })
 
-  it('keeps full length for a block that crosses UTC midnight', () => {
-    const night = { scheduled_start: '2026-10-13T23:45:00Z', scheduled_end: '2026-10-14T00:15:00Z' }
+  it('keeps a block that crosses clinic midnight visible', () => {
+    const night = { scheduled_start: '2026-10-13T18:15:00Z', scheduled_end: '2026-10-13T18:45:00Z' } // 11:45 pm-12:15 am IST
     const w = computeWindow([night])
     const g = blockGeometry(night.scheduled_start, night.scheduled_end, w)
     expect(g.height).toBeGreaterThan(0)

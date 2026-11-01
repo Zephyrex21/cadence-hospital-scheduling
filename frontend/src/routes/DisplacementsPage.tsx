@@ -1,4 +1,4 @@
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight } from '../components/icons'
 
 import { Card } from '../components/Card'
 import { IllustrationCalendar } from '../components/illustrations'

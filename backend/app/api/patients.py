@@ -21,7 +21,7 @@ WRITE_ROLES = (Role.RECEPTIONIST, Role.TRIAGE_NURSE, Role.ADMINISTRATOR)
 
 @router.get("", response_model=list[PatientRead])
 def list_patients(
-    q: str | None = Query(default=None, description="Search by name or MRN"),
+    q: str | None = Query(default=None, description="Search by name, MRN, contact or city"),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[Patient]:

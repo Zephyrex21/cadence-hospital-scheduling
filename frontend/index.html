@@ -4,18 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Cadence — clinical flow platform for public hospitals." />
-    <meta name="theme-color" content="#0E7C86" />
+    <meta name="theme-color" content="#F6F2E9" />
     <title>Cadence — Clinical Flow Platform</title>
     <link
       rel="preload"
       href="/fonts/inter-variable.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
-      href="/fonts/geist-variable.woff2"
       as="font"
       type="font/woff2"
       crossorigin
@@ -28,7 +21,10 @@
           var dark =
             t === 'dark' ||
             (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-          if (dark) document.documentElement.classList.add('dark')
+          if (dark) {
+            document.documentElement.classList.add('dark')
+            document.querySelector('meta[name="theme-color"]').setAttribute('content', '#000000')
+          }
         } catch (e) {
           /* ignore */
         }

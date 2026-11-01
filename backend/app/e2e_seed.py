@@ -46,15 +46,15 @@ def seed_e2e() -> None:
 
         pw = hash_password("cadence123")
         admin = User(
-            name="Admin User", email="admin@cadence.dev", role=Role.ADMINISTRATOR,
+            name="Vikram Singh", email="admin@cadence.dev", role=Role.ADMINISTRATOR,
             password_hash=pw, is_active=True,
         )
         able = User(
-            name="Dr. Able Cardio", email="able@cadence.dev", role=Role.DOCTOR,
+            name="Dr. Rohit Bansal", email="able@cadence.dev", role=Role.DOCTOR,
             password_hash=pw, is_active=True,
         )
         baker = User(
-            name="Dr. Baker General", email="baker@cadence.dev", role=Role.DOCTOR,
+            name="Dr. Neha Kulkarni", email="baker@cadence.dev", role=Role.DOCTOR,
             password_hash=pw, is_active=True,
         )
         db.add_all([admin, able, baker])
@@ -64,18 +64,18 @@ def seed_e2e() -> None:
         db.add(DoctorProfile(user_id=baker.id, specialty="general"))
 
         general = AppointmentType(
-            name="General consultation", default_duration_min=30, specialty="general"
+            name="General OPD consultation", default_duration_min=30, specialty="general"
         )
         db.add(general)
 
         booked_patient = Patient(
-            mrn="CAD-E0001", name="Booked Barbara", date_of_birth=date(1980, 1, 1), sex="female"
+            mrn="CAD-E0001", name="Meera Krishnan", date_of_birth=date(1980, 1, 1), sex="female"
         )
         spare = Patient(
-            mrn="CAD-E0002", name="Spare Sam", date_of_birth=date(1975, 3, 3), sex="male"
+            mrn="CAD-E0002", name="Arjun Reddy", date_of_birth=date(1975, 3, 3), sex="male"
         )
         walkin = Patient(
-            mrn="CAD-E0003", name="Walkin Wendy", date_of_birth=date(1990, 5, 5), sex="female"
+            mrn="CAD-E0003", name="Kavya Menon", date_of_birth=date(1990, 5, 5), sex="female"
         )
         db.add_all([booked_patient, spare, walkin])
         db.flush()

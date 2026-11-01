@@ -14,14 +14,29 @@
   }
 
   html {
-    font-feature-settings: 'cv11', 'ss01';
+    font-feature-settings: 'cv11', 'ss03', 'calt';
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    background-color: rgb(var(--c-canvas));
   }
 
   body {
     @apply bg-canvas text-slate antialiased;
     font-family: theme('fontFamily.sans');
+    /* A soft ambient wash behind everything: warm paper light in cream, a faint
+       blue moonglow in dark. Fixed so it never scrolls with content. */
+    background-image: radial-gradient(
+      1100px 520px at 50% -8%,
+      rgb(var(--glow) / var(--glow-alpha)),
+      transparent 70%
+    );
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+
+  ::selection {
+    background: rgb(var(--c-brand-fill) / 0.22);
   }
 
   /* Tabular numerals everywhere numbers must align (times, counts, estimates). */
@@ -30,7 +45,13 @@
   }
 
   :focus-visible {
-    @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-canvas;
+    @apply outline-none ring-2 ring-brand/60 ring-offset-2 ring-offset-canvas;
+  }
+
+  /* Quiet, Apple-like scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--c-muted) / 0.35) transparent;
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -38,8 +59,36 @@
     *::before,
     *::after {
       animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+@layer components {
+  /* Frosted glass for the sidebar, top bar, toasts and floating panels. */
+  .glass {
+    background-color: rgb(var(--c-surface) / 0.72);
+    -webkit-backdrop-filter: saturate(180%) blur(22px);
+    backdrop-filter: saturate(180%) blur(22px);
+  }
+
+  /* A card catching light from above: hairline border + top highlight (in shadow-card). */
+  .lit {
+    @apply border border-hairline bg-surface shadow-card;
+  }
+
+  /* Filled "shine" button face (Apple blue lit from above). */
+  .btn-shine {
+    background-color: rgb(var(--c-brand-fill));
+    background-image: theme('backgroundImage.sheen');
+    box-shadow:
+      0 1px 2px rgb(var(--c-brand-fill) / 0.35),
+      0 6px 14px -6px rgb(var(--c-brand-fill) / 0.55),
+      inset 0 1px 0 rgb(255 255 255 / 0.28);
+  }
+  .btn-shine:hover:not(:disabled) {
+    filter: brightness(1.07) saturate(1.05);
   }
 }

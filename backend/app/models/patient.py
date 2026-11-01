@@ -1,4 +1,4 @@
-"""Patient model. All patient data in Cadence is synthetic (development only)."""
+"""Patient model."""
 
 from __future__ import annotations
 
@@ -20,7 +20,14 @@ class Patient(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
     date_of_birth: Mapped[date] = mapped_column(Date, nullable=False)
     sex: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Phone / e-mail, free text.
     contact: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    blood_group: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # "Name (relation) · phone"
+    emergency_contact: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    # Allergies, chronic conditions, anything the front desk should know.
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     def __repr__(self) -> str:  # pragma: no cover - debug aid
         return f"<Patient id={self.id} mrn={self.mrn!r}>"

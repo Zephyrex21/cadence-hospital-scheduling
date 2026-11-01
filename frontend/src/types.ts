@@ -24,6 +24,10 @@ export interface Patient {
   date_of_birth: string
   sex: string
   contact: string | null
+  city?: string | null
+  blood_group?: string | null
+  emergency_contact?: string | null
+  notes?: string | null
 }
 
 export interface ApiErrorBody {

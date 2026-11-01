@@ -1,29 +1,31 @@
-import { Loader2 } from 'lucide-react'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
+
+import { Loader2 } from './icons'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger'
 type Size = 'sm' | 'md' | 'lg'
 
 const base =
-  'relative inline-flex items-center justify-center gap-2 rounded-control font-medium ' +
-  'transition-[color,background-color,box-shadow,transform] duration-150 ease-out-soft ' +
-  'active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ' +
+  'relative inline-flex select-none items-center justify-center gap-2 rounded-pill font-medium ' +
+  'transition-[color,background-color,box-shadow,transform,filter] duration-200 ease-out-soft ' +
+  'active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ' +
   'focus-visible:ring-offset-2 focus-visible:ring-offset-surface ' +
-  'disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100'
+  'disabled:cursor-not-allowed disabled:opacity-55 disabled:active:scale-100'
 
-// `text-surface` (not a literal white) flips with the theme: on the light-teal brand
-// of dark mode it renders dark text, keeping AA contrast in both themes.
+// Primary is the Apple-blue "shine" face (see .btn-shine in index.css). Destructive
+// actions are a soft tinted pill so they never out-shout the primary action.
 const variants: Record<Variant, string> = {
-  primary: 'bg-brand text-surface shadow-sm hover:bg-brand-strong',
-  secondary: 'bg-surface text-ink ring-1 ring-inset ring-hairline hover:bg-canvas',
-  ghost: 'text-slate hover:bg-canvas hover:text-ink',
-  danger: 'bg-danger text-surface shadow-sm hover:bg-danger/90',
+  primary: 'btn-shine text-on-brand',
+  secondary:
+    'bg-surface text-ink shadow-xs ring-1 ring-inset ring-hairline hover:bg-canvas hover:shadow-sm',
+  ghost: 'text-slate hover:bg-ink/5 hover:text-ink',
+  danger: 'bg-danger/10 text-danger ring-1 ring-inset ring-danger/25 hover:bg-danger/15',
 }
 
 const sizes: Record<Size, string> = {
-  sm: 'h-8 px-3 text-xs',
-  md: 'h-10 px-4 text-sm',
-  lg: 'h-11 px-5 text-sm',
+  sm: 'h-8 px-3.5 text-xs',
+  md: 'h-10 px-5 text-sm',
+  lg: 'h-12 px-6 text-[15px]',
 }
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

@@ -1,5 +1,5 @@
 import { useReducedMotion, m } from 'framer-motion'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight } from '../../components/icons'
 
 import { StatusBadge } from '../../components/StatusBadge'
 import type { EmergencyMove, EmergencyPlan, PlanResponse } from '../../types'

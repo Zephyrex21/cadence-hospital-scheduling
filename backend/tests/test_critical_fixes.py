@@ -623,7 +623,7 @@ def test_run_migrations_upgrades_an_old_schema_and_cancels_existing_overlaps(
 
     con = sqlite3.connect(db_file)
     assert "request_hash" in columns(con)
-    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0005"
+    assert con.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "0006"
     # Earliest kept, later duplicate cancelled, nothing deleted.
     assert dict(con.execute("SELECT id, status FROM appointments")) == {1: "booked", 2: "cancelled"}
     with pytest.raises(sqlite3.IntegrityError):  # and the guard is now live

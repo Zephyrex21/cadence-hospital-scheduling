@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Loader2, X } from 'lucide-react'
+import { CheckCircle2, Loader2, X } from './icons'
 import { useEffect, useRef, useState } from 'react'
 
 import { pingBackend } from '../lib/api'
@@ -113,13 +113,17 @@ export function BackendWakeBanner() {
     <div
       role="status"
       aria-live="polite"
-      className={`fixed inset-x-4 bottom-4 z-[100] transition duration-300 ease-out motion-reduce:transition-none sm:left-auto sm:right-4 sm:w-[390px] ${
-        phase === 'leaving' ? 'translate-y-2 opacity-0' : 'translate-y-0 opacity-100'
+      className={`fixed left-1/2 top-3 z-[100] w-[min(calc(100vw-2rem),26rem)] -translate-x-1/2 transition duration-300 ease-out motion-reduce:transition-none ${
+        phase === 'leaving' ? '-translate-y-2 opacity-0' : 'translate-y-0 opacity-100'
       } ${ready ? 'pointer-events-none' : ''}`}
     >
-      <div className="flex items-start gap-3 rounded-card border border-hairline bg-elevated p-4 shadow-lg">
+      <div className="flex items-start gap-3 glass rounded-card border border-hairline p-4 shadow-lg">
         {ready ? (
-          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden />
+          <CheckCircle2
+            weight="fill"
+            className="mt-0.5 h-5 w-5 shrink-0 text-success"
+            aria-hidden
+          />
         ) : (
           <Loader2
             className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-brand motion-reduce:animate-none"
@@ -151,7 +155,9 @@ export function BackendWakeBanner() {
                 Cadence is hosted on a free platform, so the backend sleeps when idle and may take
                 up to a minute to wake. Hang tight — we&apos;ll let you know when it&apos;s ready.
               </p>
-              <p className="mt-1.5 font-mono text-xs tabular-nums text-muted">{elapsed}s elapsed</p>
+              {elapsed >= 3 && (
+                <p className="mt-1.5 text-xs tabular-nums text-muted">{elapsed}s elapsed</p>
+              )}
             </>
           )}
         </div>

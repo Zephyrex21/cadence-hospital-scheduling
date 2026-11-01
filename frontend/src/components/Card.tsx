@@ -6,12 +6,12 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
   padded?: boolean
 }
 
-/** Surface card — the standard layered container. */
+/** Surface card — catches light from above (hairline border + top highlight). */
 export function Card({ children, padded = false, className = '', ...rest }: CardProps) {
   return (
     <div
       className={`rounded-card border border-hairline bg-surface shadow-card ${
-        padded ? 'p-5' : ''
+        padded ? 'p-6' : ''
       } ${className}`}
       {...rest}
     >
@@ -22,11 +22,11 @@ export function Card({ children, padded = false, className = '', ...rest }: Card
 
 /** Optional card header with a hairline divider. */
 export function CardHeader({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`border-b border-hairline px-5 py-3 ${className}`}>{children}</div>
+  return <div className={`border-b border-hairline px-6 py-4 ${className}`}>{children}</div>
 }
 
 export function CardTitle({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <h3 className={`font-display text-base font-semibold text-ink ${className}`}>{children}</h3>
+    <h3 className={`font-display text-headline font-semibold text-ink ${className}`}>{children}</h3>
   )
 }

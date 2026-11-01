@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiFetch } from '../../lib/api'
+import { dayParam as clinicDayParam } from '../../lib/time'
 import type { Appointment, AppointmentType, Doctor, Slot } from '../../types'
 
-/** Noon UTC of the given YYYY-MM-DD — safely inside the target day for the API. */
+/** The instant to send for a picked clinic date (see `lib/time.ts#dayParam`). */
 export function dayParam(date: string): string {
-  return new Date(`${date}T12:00:00Z`).toISOString()
+  return new Date(clinicDayParam(date)).toISOString()
 }
 
 export function useDoctors() {

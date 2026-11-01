@@ -20,6 +20,11 @@ def _generate_mrn() -> str:
     return f"CAD-{secrets.randbelow(1_000_000):06d}"
 
 
+def _clean(value: str | None) -> str | None:
+    value = (value or "").strip()
+    return value or None
+
+
 def create_patient(db: Session, data: PatientCreate, *, actor_id: int) -> Patient:
     mrn: str | None = None
     for _ in range(_MRN_ATTEMPTS):
@@ -32,10 +37,14 @@ def create_patient(db: Session, data: PatientCreate, *, actor_id: int) -> Patien
 
     patient = Patient(
         mrn=mrn,
-        name=data.name,
+        name=data.name.strip(),
         date_of_birth=data.date_of_birth,
         sex=data.sex,
-        contact=data.contact,
+        contact=_clean(data.contact),
+        city=_clean(data.city),
+        blood_group=_clean(data.blood_group),
+        emergency_contact=_clean(data.emergency_contact),
+        notes=_clean(data.notes),
     )
     db.add(patient)
     db.flush()  # assigns patient.id
@@ -65,5 +74,12 @@ def search_patients(db: Session, query: str | None, *, limit: int = 50) -> list[
     stmt = select(Patient).order_by(Patient.name)
     if query:
         like = f"%{query.strip()}%"
-        stmt = stmt.where(or_(Patient.name.ilike(like), Patient.mrn.ilike(like)))
+        stmt = stmt.where(
+            or_(
+                Patient.name.ilike(like),
+                Patient.mrn.ilike(like),
+                Patient.contact.ilike(like),
+                Patient.city.ilike(like),
+            )
+        )
     return list(db.scalars(stmt.limit(limit)))

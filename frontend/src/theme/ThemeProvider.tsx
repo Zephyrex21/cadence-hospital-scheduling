@@ -56,6 +56,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', resolved === 'dark')
+    // Tint the browser / mobile status bar to match: cream in light, true black in dark.
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', resolved === 'dark' ? '#000000' : '#F6F2E9')
   }, [resolved])
 
   const setTheme = useCallback((t: Theme) => {

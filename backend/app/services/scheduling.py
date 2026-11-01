@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.clock import clinic_day_bounds
 from app.core.enums import AppointmentOrigin, AppointmentStatus, AuditAction
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.models.appointment import Appointment
@@ -39,11 +40,6 @@ ACTIVE_STATUSES = (
     AppointmentStatus.CHECKED_IN,
     AppointmentStatus.IN_PROGRESS,
 )
-
-
-def _day_bounds(day: datetime) -> tuple[datetime, datetime]:
-    start = day.replace(hour=0, minute=0, second=0, microsecond=0)
-    return start, start + timedelta(days=1)
 
 
 def _shift_intervals(db: Session, doctor_id: int, lo: datetime, hi: datetime) -> list[Interval]:
@@ -101,7 +97,7 @@ def list_appointment_types(db: Session) -> list[AppointmentType]:
 
 def list_shifts(db: Session, doctor_id: int, day: datetime) -> list[Shift]:
     day = ensure_aware_utc(day)
-    lo, hi = _day_bounds(day)
+    lo, hi = clinic_day_bounds(day)
     return list(
         db.scalars(
             select(Shift).where(
@@ -116,7 +112,7 @@ def available_slots(db: Session, doctor_id: int, type_id: int, day: datetime) ->
     appt_type = db.get(AppointmentType, type_id)
     if appt_type is None:
         raise NotFoundError("Appointment type not found")
-    lo, hi = _day_bounds(day)
+    lo, hi = clinic_day_bounds(day)
     shifts = _shift_intervals(db, doctor_id, lo, hi)
     # Shifts can straddle the day boundary; look at busy time across their full extent.
     busy_lo = min((s.start for s in shifts), default=lo)
@@ -131,7 +127,7 @@ def available_slots(db: Session, doctor_id: int, type_id: int, day: datetime) ->
 
 def list_schedule(db: Session, day: datetime, doctor_id: int | None = None) -> list[Appointment]:
     day = ensure_aware_utc(day)
-    lo, hi = _day_bounds(day)
+    lo, hi = clinic_day_bounds(day)
     stmt = select(Appointment).where(
         Appointment.scheduled_start < hi,
         Appointment.scheduled_end > lo,

@@ -1,5 +1,5 @@
 import { AnimatePresence, m } from 'framer-motion'
-import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info, X, XCircle } from './icons'
 import {
   createContext,
   useCallback,
@@ -95,9 +95,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 8, scale: 0.98 }}
                 transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-                className="pointer-events-auto flex items-start gap-3 rounded-card border border-hairline bg-elevated p-3 shadow-lg"
+                className="pointer-events-auto glass flex items-start gap-3 rounded-card border border-hairline p-3.5 shadow-lg"
               >
-                <Icon size={18} aria-hidden className={`mt-0.5 shrink-0 ${ACCENT[t.tone]}`} />
+                <Icon size={20} weight="fill" aria-hidden className={`mt-0.5 shrink-0 ${ACCENT[t.tone]}`} />
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-ink">{t.title}</p>
                   {t.description && <p className="mt-0.5 text-xs text-muted">{t.description}</p>}

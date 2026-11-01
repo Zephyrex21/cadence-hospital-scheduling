@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown } from './icons'
 import { forwardRef, type ReactNode, type SelectHTMLAttributes } from 'react'
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
@@ -24,7 +24,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         id={selectId}
         aria-invalid={error ? true : undefined}
         aria-describedby={errorId}
-        className={`h-10 w-full appearance-none rounded-control border bg-surface pl-3 pr-9 text-sm text-ink shadow-xs outline-none transition duration-150 ease-out-soft focus:border-brand focus:ring-2 focus:ring-brand/30 ${
+        className={`h-11 w-full appearance-none rounded-control border bg-surface pl-3.5 pr-10 text-sm text-ink shadow-xs outline-none transition duration-200 ease-out-soft hover:border-muted/40 focus:border-brand focus:ring-4 focus:ring-brand/15 ${
           error ? 'border-danger' : 'border-hairline'
         } ${className}`}
         {...rest}
@@ -34,7 +34,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
       <ChevronDown
         size={16}
         aria-hidden
-        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+        className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-muted"
       />
     </div>
   )
@@ -44,7 +44,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   return (
     <div className="flex flex-col gap-1.5">
       {label ? (
-        <label htmlFor={selectId} className="text-sm font-medium text-ink">
+        <label htmlFor={selectId} className="text-[13px] font-medium text-slate">
           {label}
         </label>
       ) : null}

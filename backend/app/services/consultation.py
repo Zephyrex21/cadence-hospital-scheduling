@@ -6,12 +6,13 @@ A doctor may only change their own appointments; an administrator may change any
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.clock import clinic_day_bounds
 from app.core.enums import (
     AppointmentStatus,
     AuditAction,
@@ -46,14 +47,9 @@ _TRANSITIONS: dict[ConsultationAction, tuple[tuple[AppointmentStatus, ...], Appo
 }
 
 
-def _day_bounds(day: datetime) -> tuple[datetime, datetime]:
-    start = day.replace(hour=0, minute=0, second=0, microsecond=0)
-    return start, start + timedelta(days=1)
-
-
 def list_queue(db: Session, now: datetime, doctor_id: int | None = None) -> list[dict[str, Any]]:
     now = ensure_aware_utc(now)
-    lo, hi = _day_bounds(now)
+    lo, hi = clinic_day_bounds(now)
     stmt = select(Appointment).where(
         Appointment.status.in_(_ACTIVE),
         Appointment.scheduled_start < hi,

@@ -7,12 +7,13 @@ and a per-doctor load table with running delay.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.clock import clinic_day_bounds
 from app.core.enums import Acuity, AppointmentStatus
 from app.models.appointment import Appointment
 from app.models.base import ensure_aware_utc
@@ -34,18 +35,13 @@ _WAITING = (AppointmentStatus.BOOKED, AppointmentStatus.CHECKED_IN)
 _MAX_ESCALATIONS = 10
 
 
-def _day_bounds(day: datetime) -> tuple[datetime, datetime]:
-    start = day.replace(hour=0, minute=0, second=0, microsecond=0)
-    return start, start + timedelta(days=1)
-
-
 def _count(db: Session, stmt: Any) -> int:
     return len(list(db.scalars(stmt)))
 
 
 def summary(db: Session, now: datetime) -> dict[str, Any]:
     now = ensure_aware_utc(now)
-    lo, hi = _day_bounds(now)
+    lo, hi = clinic_day_bounds(now)
 
     active = list(
         db.scalars(
@@ -137,7 +133,7 @@ def _patient_names(db: Session, ids: set[int]) -> dict[int, str]:
 def _doctor_load(
     db: Session, active: list[Appointment], now: datetime
 ) -> list[dict[str, Any]]:
-    lo, hi = _day_bounds(now)
+    lo, hi = clinic_day_bounds(now)
     on_shift = db.execute(
         select(User.id, User.name)
         .join(DoctorProfile, DoctorProfile.user_id == User.id)

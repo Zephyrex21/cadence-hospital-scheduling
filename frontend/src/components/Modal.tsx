@@ -1,4 +1,4 @@
-import { X } from 'lucide-react'
+import { X } from './icons'
 import { useEffect, useId, useRef } from 'react'
 import type { ReactNode } from 'react'
 
@@ -73,7 +73,7 @@ export function Modal({ title, onClose, children, footer }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50 p-4 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/30 p-4 backdrop-blur-md animate-fade-in"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
@@ -84,23 +84,23 @@ export function Modal({ title, onClose, children, footer }: ModalProps) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        className="w-full max-w-lg overflow-hidden rounded-modal border border-hairline bg-elevated shadow-lg outline-none animate-scale-in"
+        className="w-full max-w-lg overflow-hidden rounded-modal border border-hairline bg-elevated shadow-lg outline-none animate-scale-in max-h-[calc(100vh-2rem)] overflow-y-auto"
       >
-        <div className="flex items-center justify-between gap-3 border-b border-hairline px-6 py-4">
-          <h3 id={titleId} className="font-display text-lg font-semibold text-ink">
+        <div className="flex items-center justify-between gap-3 px-7 pb-2 pt-6">
+          <h3 id={titleId} className="font-display text-title font-semibold text-ink">
             {title}
           </h3>
           <button
             onClick={onClose}
             aria-label="Close dialog"
-            className="-mr-1.5 rounded-control p-1.5 text-muted transition-colors duration-150 ease-out-soft hover:bg-canvas hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            className="-mr-2 rounded-pill bg-ink/5 p-1.5 text-muted transition-colors duration-150 ease-out-soft hover:bg-ink/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           >
-            <X size={18} />
+            <X size={16} weight="bold" />
           </button>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-7 pb-6 pt-3">{children}</div>
         {footer && (
-          <div className="flex justify-end gap-3 border-t border-hairline bg-canvas/50 px-6 py-4">
+          <div className="flex justify-end gap-3 border-t border-hairline bg-canvas/60 px-7 py-4">
             {footer}
           </div>
         )}
