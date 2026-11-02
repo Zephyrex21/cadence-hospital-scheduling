@@ -6,6 +6,8 @@ export function loginRequest(email: string, password: string): Promise<Tokens> {
     method: 'POST',
     body: { email, password },
     auth: false,
+    // Safe to replay: if the gateway answered 502/503 the request never reached the app.
+    retry: true,
   })
 }
 

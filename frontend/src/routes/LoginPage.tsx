@@ -7,6 +7,7 @@ import { Input } from '../components/Input'
 import { useAuth } from '../features/auth/AuthContext'
 import { HeroScene } from '../features/login/HeroScene'
 import { ApiError } from '../lib/api'
+import { useBackendStatus } from '../lib/useBackendStatus'
 import { ThemeToggle } from '../theme/ThemeToggle'
 
 export function LoginPage() {
@@ -18,6 +19,9 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Sign-in waits for a sleeping server automatically; say so on the button.
+  const backend = useBackendStatus()
+  const waitingForServer = submitting && backend.phase === 'waking'
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
@@ -83,7 +87,7 @@ export function LoginPage() {
             ) : null}
 
             <Button type="submit" size="lg" loading={submitting} className="mt-1 w-full">
-              Sign in
+              {waitingForServer ? 'Waiting for the server…' : 'Sign in'}
             </Button>
           </form>
 

@@ -231,9 +231,15 @@ pnpm run e2e
   the earliest-created one and marks the later ones `cancelled` (never deleted) and logs their ids.
   If the live database was seeded with the old demo password, run
   `CADENCE_SEED_PASSWORD=<strong> python -m app.seed` once to rotate it.
-- **Free-tier hosting.** On Render's free plan the API sleeps when idle. The UI shows a
-  "waking up the server" notice, polls `/health`, says "Welcome" when it's awake, then disappears.
-  Set `CADENCE_JWT_SECRET` so sign-ins also survive the server restarting.
+- **Free-tier hosting.** On Render's free plan the API sleeps when idle and can take a minute or
+  two to wake. Opening the UI pings the API straight away (a `no-cors` request to the Render URL
+  *and* a `/api/health` poll through the Vercel rewrite). If it doesn't answer within ~1 s a
+  "Waking up the server…" notice appears, requests (including **Sign in**) wait instead of failing,
+  and the notice turns into "Service is live" once `/health` succeeds. A tab left idle for 10+ min
+  is re-checked when you come back to it. A gateway error or network failure never signs you out.
+  The Render URL lives in `frontend/src/lib/backend.ts` (override with `VITE_BACKEND_URL` in
+  Vercel's env settings; an empty value disables the direct wake call). Set `CADENCE_JWT_SECRET`
+  so sign-ins also survive the server restarting.
 
 ## Notes
 

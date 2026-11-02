@@ -8,6 +8,7 @@ import { App } from './App'
 import { toast, ToastProvider } from './components/Toast'
 import { AuthProvider } from './features/auth/AuthContext'
 import { ApiError } from './lib/api'
+import { startBackendCheck } from './lib/backend'
 import './styles/index.css'
 import { ThemeProvider } from './theme/ThemeProvider'
 
@@ -27,6 +28,10 @@ const queryClient = new QueryClient({
     },
   }),
 })
+
+// Opening the app wakes the (free-tier, sleeps-when-idle) backend as early as possible —
+// before React has even mounted — so it is already booting while the page renders.
+void startBackendCheck()
 
 // Lazy-load framer-motion's full feature set (layout, etc.) as its own chunk so
 // the initial bundle stays small; `m` components render statically until it loads.

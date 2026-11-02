@@ -1,14 +1,30 @@
 /** Core API client.
  *
  * Injects the bearer token, and on a 401 attempts a single refresh before
- * replaying the request. If refresh fails, tokens are cleared and an
+ * replaying the request. If the refresh token is *rejected*, tokens are cleared and an
  * `AuthExpiredError` is thrown so the auth layer can redirect to login.
+ *
+ * The backend sits on a host that sleeps when idle, so every request first waits for the
+ * backend to be awake (see `backend.ts`) instead of firing into a gateway error. A
+ * gateway error / network failure never deletes the session — only a genuine 401 does.
  */
 
 import type { ApiErrorBody, Tokens } from '../types'
 import { clearTokens, getAccessToken, getRefreshToken, storeTokens } from './auth-storage'
+import {
+  API_BASE as BASE,
+  getBackendStatus,
+  reportBackendDown,
+  touchBackend,
+  waitForBackend,
+} from './backend'
 
-const BASE = '/api'
+/** Gateway statuses a proxy returns while the upstream is asleep or still booting. */
+const TRANSIENT_STATUS = new Set([502, 503, 504])
+/** How many times a safe request is replayed after re-waking the backend. */
+const MAX_WAKE_RETRIES = 2
+const WAKING_MESSAGE = 'The server is waking up. Please try again in a moment.'
+const NETWORK_MESSAGE = "Can't reach the server. Check your connection and try again."
 
 export class ApiError extends Error {
   constructor(
@@ -41,25 +57,32 @@ async function parseError(resp: Response): Promise<ApiError> {
   }
 }
 
-// Single-flight refresh: concurrent 401s share one refresh round-trip.
-let refreshInFlight: Promise<boolean> | null = null
+type RefreshOutcome = 'ok' | 'rejected' | 'unavailable'
 
-async function tryRefresh(): Promise<boolean> {
+// Single-flight refresh: concurrent 401s share one refresh round-trip.
+let refreshInFlight: Promise<RefreshOutcome> | null = null
+
+/** `rejected` = the server said the refresh token is no good (sign out);
+ *  `unavailable` = we couldn't tell because the server is down (keep the session). */
+async function tryRefresh(): Promise<RefreshOutcome> {
   const refresh_token = getRefreshToken()
-  if (!refresh_token) return false
+  if (!refresh_token) return 'rejected'
   if (!refreshInFlight) {
-    refreshInFlight = (async () => {
+    refreshInFlight = (async (): Promise<RefreshOutcome> => {
       try {
         const resp = await fetch(`${BASE}/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refresh_token }),
         })
-        if (!resp.ok) return false
-        storeTokens((await resp.json()) as Tokens)
-        return true
+        if (resp.ok) {
+          storeTokens((await resp.json()) as Tokens)
+          return 'ok'
+        }
+        const clientError = resp.status >= 400 && resp.status < 500
+        return clientError && resp.status !== 408 && resp.status !== 429 ? 'rejected' : 'unavailable'
       } catch {
-        return false
+        return 'unavailable'
       } finally {
         refreshInFlight = null
       }
@@ -72,10 +95,40 @@ interface RequestOptions {
   method?: string
   body?: unknown
   auth?: boolean
+  /** Safe to replay if the backend turns out to be asleep (default: GET only). */
+  retry?: boolean
+  /** Wait for the backend to be awake before sending (default: true). */
+  wake?: boolean
+}
+
+/** Send once; if the backend is down, re-wake it and (when `retry`) replay. */
+async function send(
+  run: () => Promise<Response>,
+  retry: boolean,
+  wake: boolean,
+): Promise<Response> {
+  for (let attempt = 0; ; attempt++) {
+    let failure: ApiError
+    try {
+      const resp = await run()
+      if (!TRANSIENT_STATUS.has(resp.status)) {
+        touchBackend()
+        return resp
+      }
+      failure = new ApiError(resp.status, 'server_unavailable', WAKING_MESSAGE)
+    } catch (err) {
+      if (!(err instanceof TypeError)) throw err // e.g. an abort — not a connectivity problem
+      failure = new ApiError(0, 'network_error', NETWORK_MESSAGE)
+    }
+    reportBackendDown()
+    if (!wake || !retry || attempt >= MAX_WAKE_RETRIES) throw failure
+    await waitForBackend()
+    if (getBackendStatus().phase === 'failed') throw failure
+  }
 }
 
 export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, auth = true } = opts
+  const { method = 'GET', body, auth = true, retry = method === 'GET', wake = true } = opts
 
   const run = async (): Promise<Response> => {
     const headers: Record<string, string> = {}
@@ -91,17 +144,24 @@ export async function apiFetch<T>(path: string, opts: RequestOptions = {}): Prom
     })
   }
 
-  let resp = await run()
+  // Never fire into a sleeping backend: wait (the banner explains why) until it is up.
+  if (wake) await waitForBackend()
+
+  let resp = await send(run, retry, wake)
 
   if (resp.status === 401 && auth && getAccessToken()) {
-    const refreshed = await tryRefresh()
-    if (refreshed) {
-      resp = await run()
-    } else {
+    const outcome = await tryRefresh()
+    if (outcome === 'ok') {
+      resp = await send(run, retry, wake)
+    } else if (outcome === 'rejected') {
       clearTokens()
       // Tell the auth layer so it can drop the session and send the user to login.
       if (typeof window !== 'undefined') window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT))
       throw new AuthExpiredError()
+    } else {
+      // The server is down, not the session: keep the tokens and let the caller retry.
+      reportBackendDown()
+      throw new ApiError(503, 'server_unavailable', WAKING_MESSAGE)
     }
   }
 
@@ -115,29 +175,6 @@ export interface HealthResponse {
   service: string
 }
 
-/**
- * Is the API actually up? Resolves false (never throws) on timeout, network error,
- * a non-2xx proxy error, or a non-JSON "waking up" placeholder page — so callers can
- * simply poll it while a free-tier host cold-starts.
- */
-export async function pingBackend(timeoutMs = 20_000): Promise<boolean> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const resp = await fetch(`${BASE}/health`, {
-      signal: controller.signal,
-      cache: 'no-store',
-    })
-    if (!resp.ok) return false
-    const body = (await resp.json()) as Partial<HealthResponse>
-    return body.status === 'ok'
-  } catch {
-    return false
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
 export function getHealth(): Promise<HealthResponse> {
-  return apiFetch<HealthResponse>('/health', { auth: false })
+  return apiFetch<HealthResponse>('/health', { auth: false, wake: false })
 }

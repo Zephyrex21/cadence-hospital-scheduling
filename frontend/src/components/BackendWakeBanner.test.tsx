@@ -2,10 +2,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { __test } from '../lib/backend'
 import { BackendWakeBanner } from './BackendWakeBanner'
 
-const pingBackend = vi.hoisted(() => vi.fn<() => Promise<boolean>>())
-vi.mock('../lib/api', () => ({ pingBackend }))
+function stubHealth(isUp: () => boolean) {
+  const fn = vi.fn(async () =>
+    isUp()
+      ? new Response(JSON.stringify({ status: 'ok', service: 'cadence-api' }), { status: 200 })
+      : new Response('<html>waking</html>', { status: 503 }),
+  )
+  vi.stubGlobal('fetch', fn)
+  return fn
+}
 
 function renderBanner() {
   const client = new QueryClient()
@@ -28,55 +36,64 @@ async function advance(ms: number) {
 describe('BackendWakeBanner', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    sessionStorage.clear()
-    pingBackend.mockReset()
+    __test.reset()
   })
   afterEach(() => {
+    __test.reset()
     vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
 
-  it('explains the free-hosting delay, then welcomes the user and disappears', async () => {
-    // Sleeping for two polls, then awake.
-    pingBackend.mockResolvedValueOnce(false).mockResolvedValueOnce(false).mockResolvedValue(true)
+  it('calls the backend on open, explains the wait, then says the service is live and goes away', async () => {
+    let up = false
+    const fetchMock = stubHealth(() => up)
     const { invalidate } = renderBanner()
 
+    await advance(100)
+    expect(fetchMock).toHaveBeenCalled() // opening the app pings the backend
+    expect(screen.queryByRole('status')).not.toBeInTheDocument() // …but no flash yet
+
+    await advance(1_500)
     expect(screen.getByText(/waking up the server/i)).toBeInTheDocument()
     expect(screen.getByText(/hosted on a free platform/i)).toBeInTheDocument()
 
-    await advance(6_000) // two failed polls (2.5s apart) then success
-    expect(screen.getByText(/welcome to cadence/i)).toBeInTheDocument()
+    up = true
+    await advance(3_000)
+    expect(screen.getByText(/service is live/i)).toBeInTheDocument()
     expect(screen.queryByText(/waking up the server/i)).not.toBeInTheDocument()
-    // Requests that failed during the cold start are retried.
-    expect(invalidate).toHaveBeenCalled()
+    expect(invalidate).toHaveBeenCalled() // requests that failed during the cold start refetch
 
-    await advance(3_500) // welcome stays briefly, then fades out
-    expect(screen.queryByText(/welcome to cadence/i)).not.toBeInTheDocument()
-    expect(sessionStorage.getItem('cadence:backend-awake-at')).not.toBeNull()
+    await advance(3_500)
+    expect(screen.queryByText(/service is live/i)).not.toBeInTheDocument()
   })
 
-  it('stays out of the way when the backend was confirmed awake moments ago', () => {
-    sessionStorage.setItem('cadence:backend-awake-at', String(Date.now()))
+  it('stays completely out of the way when the backend is already awake', async () => {
+    stubHealth(() => true)
     renderBanner()
+    await advance(5_000)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    expect(pingBackend).not.toHaveBeenCalled()
   })
 
   it('offers a retry when the server is still down after a long wait', async () => {
-    pingBackend.mockResolvedValue(false)
+    stubHealth(() => false)
     renderBanner()
     await advance(4 * 60_000 + 10_000)
-    expect(screen.getByText(/still waking up/i)).toBeInTheDocument()
+    expect(screen.getByText(/isn.t responding/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
   })
 
   it('can be dismissed while waiting and stays dismissed', async () => {
-    pingBackend.mockResolvedValueOnce(false).mockResolvedValue(true)
+    let up = false
+    stubHealth(() => up)
     renderBanner()
+    await advance(1_500)
     await act(async () => {
       screen.getByRole('button', { name: /dismiss notice/i }).click()
     })
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    await advance(10_000) // backend wakes up — no welcome pops back in
+
+    up = true
+    await advance(10_000)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 })

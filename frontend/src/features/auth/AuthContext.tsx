@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 
-import { AUTH_EXPIRED_EVENT } from '../../lib/api'
+import { ApiError, AUTH_EXPIRED_EVENT } from '../../lib/api'
 import { clearTokens, getAccessToken, storeTokens } from '../../lib/auth-storage'
 import type { User } from '../../types'
 import { fetchMe, loginRequest } from './api'
@@ -39,9 +39,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(me)
         setStatus('authenticated')
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (!active) return
-        clearTokens()
+        // Only a rejected session deletes the tokens. If the server was merely asleep or
+        // unreachable, keep them so the next visit signs straight back in.
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) clearTokens()
         setStatus('anonymous')
       })
     return () => {
