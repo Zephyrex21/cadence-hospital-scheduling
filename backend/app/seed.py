@@ -44,7 +44,7 @@ _STAFF = [
     ("Dr. Priya Sharma", "doctor@cadence.dev", Role.DOCTOR),
     ("Dr. Arjun Mehta", "doctor2@cadence.dev", Role.DOCTOR),
     ("Dr. Kavita Nair", "doctor3@cadence.dev", Role.DOCTOR),
-    ("Vikram Singh", "admin@cadence.dev", Role.ADMINISTRATOR),
+    ("Saurabh Raj Shekhar", "admin@cadence.dev", Role.ADMINISTRATOR),
 ]
 
 # doctor e-mail -> specialty (drives which appointment types / emergencies they take)
