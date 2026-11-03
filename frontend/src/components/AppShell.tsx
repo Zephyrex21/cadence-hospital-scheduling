@@ -20,6 +20,7 @@ import {
   LogOut,
   Siren,
   SquaresFour,
+  Stethoscope,
   UsersThree,
   X,
   type Icon,
@@ -43,6 +44,7 @@ const NAV: NavEntry[] = [
   { to: '/emergency', label: 'Emergency', icon: Siren, roles: EMERGENCY_ROLES },
   { to: '/displacements', label: 'Displacements', icon: ClockCounterClockwise },
   { to: '/patients', label: 'Patients', icon: UsersThree },
+  { to: '/staff', label: 'Staff', icon: Stethoscope },
   { to: '/audit', label: 'Decisions & audit', icon: ClipboardText, roles: ADMIN_ONLY },
 ]
 

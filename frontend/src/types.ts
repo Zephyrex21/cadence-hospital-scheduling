@@ -276,3 +276,110 @@ export interface EscalationOptions {
   appointment_details: Record<string, ApptDetail>
   doctor_names: Record<string, string>
 }
+
+// --- MongoDB-backed profiles ---------------------------------------------------------
+
+export interface EmergencyContact {
+  name: string
+  relation?: string | null
+  phone?: string | null
+  is_primary?: boolean
+}
+
+export interface Allergy {
+  substance: string
+  reaction?: string | null
+  severity?: 'mild' | 'moderate' | 'severe' | null
+}
+
+export interface Medication {
+  name: string
+  dose?: string | null
+  frequency?: string | null
+}
+
+export interface PatientProfile {
+  patient_id: number
+  mrn: string
+  demographics?: { preferred_language?: string | null; occupation?: string | null }
+  contact?: { phone?: string | null; alt_phone?: string | null; email?: string | null }
+  address?: {
+    line1?: string | null
+    line2?: string | null
+    city?: string | null
+    state?: string | null
+    pin_code?: string | null
+    country?: string | null
+  }
+  emergency_contacts?: EmergencyContact[]
+  medical?: {
+    blood_group?: string | null
+    allergies?: Allergy[]
+    conditions?: string[]
+    medications?: Medication[]
+  }
+  insurance?: { scheme?: string | null; provider?: string | null; policy_no?: string | null }
+  identifiers?: { abha_id?: string | null }
+  notes?: string | null
+  updated_at?: string
+}
+
+export interface PatientProfileResponse {
+  /** Is MongoDB configured at all? */
+  enabled: boolean
+  /** …and did it answer? */
+  available: boolean
+  patient: Patient
+  profile: PatientProfile | null
+}
+
+export interface Qualification {
+  degree: string
+  institution?: string | null
+  year?: number | null
+}
+
+export interface Registration {
+  council?: string | null
+  number?: string | null
+}
+
+export interface StaffProfile {
+  user_id: number
+  role: Role
+  employee_id?: string | null
+  department?: string | null
+  languages?: string[]
+  contact?: { phone?: string | null; alt_phone?: string | null }
+  employment?: { joined_on?: string | null; status?: 'active' | 'on_leave' | 'inactive' }
+  doctor?: {
+    registration?: Registration
+    qualifications?: Qualification[]
+    sub_specialties?: string[]
+    experience_years?: number | null
+    consultation_fee_inr?: number | null
+    bio?: string | null
+  }
+  nurse?: {
+    registration?: Registration
+    qualifications?: Qualification[]
+    certifications?: { name: string; expires_on?: string | null }[]
+    ward?: string | null
+    shift_pattern?: 'day' | 'night' | 'rotating' | null
+  }
+  reception?: {
+    counter?: string | null
+    shift_pattern?: 'day' | 'night' | 'rotating' | null
+    training?: string[]
+  }
+}
+
+export interface StaffEntry {
+  user: User & { specialty?: string | null }
+  profile: StaffProfile | null
+}
+
+export interface MongoStatus {
+  enabled: boolean
+  ok: boolean
+}

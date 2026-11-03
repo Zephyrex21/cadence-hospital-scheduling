@@ -48,13 +48,30 @@ export class AuthExpiredError extends ApiError {
   }
 }
 
+interface FastApiValidationBody {
+  detail?: { loc?: unknown[]; msg?: string }[]
+}
+
 async function parseError(resp: Response): Promise<ApiError> {
   try {
-    const body = (await resp.json()) as ApiErrorBody
-    return new ApiError(resp.status, body.error.code, body.error.message, body.error.details)
+    const body = (await resp.json()) as Partial<ApiErrorBody> & FastApiValidationBody
+    if (body.error) {
+      return new ApiError(resp.status, body.error.code, body.error.message, body.error.details)
+    }
+    // FastAPI's own 422 shape: {"detail": [{"loc": ["body", "field"], "msg": "…"}]}
+    const first = Array.isArray(body.detail) ? body.detail[0] : undefined
+    if (first?.msg) {
+      const field = (first.loc ?? []).filter((part) => part !== 'body').join(' › ')
+      return new ApiError(
+        resp.status,
+        'validation_error',
+        field ? `${field}: ${first.msg}` : first.msg,
+      )
+    }
   } catch {
-    return new ApiError(resp.status, 'unknown', resp.statusText || 'Request failed')
+    // not JSON (e.g. a gateway error page) — fall through
   }
+  return new ApiError(resp.status, 'unknown', resp.statusText || 'Request failed')
 }
 
 type RefreshOutcome = 'ok' | 'rejected' | 'unavailable'

@@ -68,6 +68,12 @@ class Settings(BaseSettings):
     # updated in place — never wiped. For hosts with no shell (Render free tier).
     seed_demo_on_start: bool = False
 
+    # MongoDB Atlas profile store (patient / staff details). Optional: when the URI is
+    # empty the feature is simply off and the app behaves exactly as without it.
+    # Example: mongodb+srv://user:pass@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+    mongodb_uri: str = ""
+    mongodb_db: str = "cadence"
+
     # Login brute-force protection (per client-IP + email, and per email).
     login_max_attempts: int = 5
     login_window_sec: int = 15 * 60

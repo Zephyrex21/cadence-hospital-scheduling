@@ -241,6 +241,36 @@ pnpm run e2e
   Vercel's env settings; an empty value disables the direct wake call). Set `CADENCE_JWT_SECRET`
   so sign-ins also survive the server restarting.
 
+## MongoDB profile store (optional)
+
+Postgres stays the system of record for login, scheduling, the queue and the audit log.
+MongoDB Atlas holds the descriptive **patient and staff profiles** — structured contacts and
+addresses, emergency contacts, allergies / conditions / medications (reported, not a clinical
+record), insurance, and doctor / nurse / receptionist details (registration, qualifications,
+certifications, shifts…). Set `CADENCE_MONGODB_URI` (see `.env.example`) to turn it on; leave it
+unset and the app behaves exactly as before.
+
+- **Collections:** `patients` (keyed by Postgres `patient_id`, unique `mrn`) and one polymorphic
+  `staff_profiles` (keyed by `user_id`, role-specific `doctor` / `nurse` / `reception` block).
+  Pydantic validates writes; `$jsonSchema` validators + unique indexes are applied at startup.
+- **No duplication:** Mongo never stores a name, DOB, sex, password or specialty. A few legacy
+  patient columns (phone, city, blood group, emergency contact, notes) are mirrored back to
+  Postgres on save so the list and search keep working.
+- **API:** `GET/PUT /patients/{id}/profile`, `GET /staff`, `GET /staff/{id}`,
+  `PUT /staff/{id}/profile`, `GET /health/mongo`. A `PUT` replaces only the sections it sends;
+  which sections you may write depends on your role (receptionist: contact / address /
+  insurance…, nurse: medical / contact…, doctor: read-only, admin: all; staff may edit their own
+  contact + languages). Every write is audit-logged.
+- **Resilient:** Mongo is written *after* the Postgres commit and never blocks registration. If it
+  is down, reads return the basic record with `available: false` and writes return 424.
+  Startup (validators, indexes, backfill of any record without a profile, demo profiles when
+  `CADENCE_SEED_DEMO_ON_START=true`) runs in a background thread so it can't slow a cold start.
+- **Tests:** `mongomock` for the suite; set `CADENCE_TEST_MONGODB_URI` to also run the
+  validator test against a real MongoDB (CI does, via a `mongo:7` service).
+- **Atlas on Render's free tier:** it has no fixed outbound IP, so Atlas Network Access must allow
+  `0.0.0.0/0` — use a dedicated DB user with `readWrite` on the one database, and keep the data
+  fictitious.
+
 ## Notes
 
 - All timestamps are stored in **UTC**. `CADENCE_CLINIC_TIMEZONE` (default `Asia/Kolkata`) decides

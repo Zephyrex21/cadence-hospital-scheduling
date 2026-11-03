@@ -49,6 +49,20 @@ class ForbiddenError(AppError):
     code = "forbidden"
 
 
+class ProfileStoreDisabledError(AppError):
+    """MongoDB isn't configured. 501 (not 503) so clients don't mistake it for a cold start."""
+
+    status_code = 501
+    code = "profile_store_disabled"
+
+
+class ProfileStoreError(AppError):
+    """MongoDB is configured but failed. 424 (not 502/503) for the same reason."""
+
+    status_code = 424
+    code = "profile_store_error"
+
+
 class RateLimitError(AppError):
     status_code = 429
     code = "rate_limited"

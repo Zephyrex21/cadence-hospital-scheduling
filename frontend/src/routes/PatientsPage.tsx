@@ -20,6 +20,10 @@ import { canRegisterPatients } from '../features/auth/roles'
 import { usePatients } from '../features/patients/api'
 import { formatAge, formatDob, initials, sexLabel } from '../features/patients/format'
 import { PatientForm } from '../features/patients/PatientForm'
+import { usePatientProfile } from '../features/profiles/api'
+import { PATIENT_SECTIONS_BY_ROLE } from '../features/profiles/payload'
+import { PatientProfileForm } from '../features/profiles/PatientProfileForm'
+import { PatientProfileView } from '../features/profiles/PatientProfileView'
 import type { Patient } from '../types'
 
 export function PatientsPage() {
@@ -164,15 +168,40 @@ export function PatientsPage() {
   )
 }
 
-function PatientDetails({ patient: p, onClose }: { patient: Patient; onClose: () => void }) {
+function PatientDetails({ patient, onClose }: { patient: Patient; onClose: () => void }) {
+  const { user } = useAuth()
+  const profile = usePatientProfile(patient.id)
+  const [editing, setEditing] = useState(false)
+  const data = profile.data
+  // The profile response carries the freshest core record (profile edits mirror into it).
+  const p = data?.patient ?? patient
+  const sections = user ? PATIENT_SECTIONS_BY_ROLE[user.role] : []
+  const canEdit = !!data?.enabled && data.available && sections.length > 0
+
+  if (editing) {
+    return (
+      <Modal title={`Edit profile · ${p.name}`} onClose={() => setEditing(false)}>
+        <PatientProfileForm
+          patient={p}
+          profile={data?.profile ?? null}
+          sections={sections}
+          onDone={() => setEditing(false)}
+        />
+      </Modal>
+    )
+  }
+
   return (
     <Modal
       title={p.name}
       onClose={onClose}
       footer={
-        <Button variant="secondary" onClick={onClose}>
-          Close
-        </Button>
+        <>
+          {canEdit ? <Button onClick={() => setEditing(true)}>Edit profile</Button> : null}
+          <Button variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        </>
       }
     >
       <div className="flex flex-col gap-5">
@@ -190,13 +219,25 @@ function PatientDetails({ patient: p, onClose }: { patient: Patient; onClose: ()
             </p>
           </div>
         </div>
-        <dl className="grid gap-3 sm:grid-cols-2">
-          <Detail icon={Phone} label="Mobile / email" value={p.contact} />
-          <Detail icon={MapPin} label="City" value={p.city} />
-          <Detail icon={Drop} label="Blood group" value={p.blood_group} />
-          <Detail icon={ShieldCheck} label="Emergency contact" value={p.emergency_contact} />
-        </dl>
-        <Detail icon={Notepad} label="Notes" value={p.notes} wide />
+
+        {data?.profile ? (
+          <PatientProfileView profile={data.profile} />
+        ) : (
+          <>
+            {data?.enabled && !data.available ? (
+              <p className="rounded-control bg-canvas/70 px-3.5 py-2.5 text-sm text-muted">
+                Detailed profile is temporarily unavailable — showing the basic record.
+              </p>
+            ) : null}
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <Detail icon={Phone} label="Mobile / email" value={p.contact} />
+              <Detail icon={MapPin} label="City" value={p.city} />
+              <Detail icon={Drop} label="Blood group" value={p.blood_group} />
+              <Detail icon={ShieldCheck} label="Emergency contact" value={p.emergency_contact} />
+            </dl>
+            <Detail icon={Notepad} label="Notes" value={p.notes} wide />
+          </>
+        )}
       </div>
     </Modal>
   )

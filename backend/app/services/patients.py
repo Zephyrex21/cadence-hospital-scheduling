@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.enums import AuditAction
 from app.core.errors import ConflictError, NotFoundError
+from app.core.mongo import get_mongo_db
 from app.models.patient import Patient
 from app.schemas.patient import PatientCreate
 from app.services.audit import record_audit
@@ -60,6 +61,13 @@ def create_patient(db: Session, data: PatientCreate, *, actor_id: int) -> Patien
 
     db.commit()
     db.refresh(patient)
+
+    # Optional MongoDB profile: created after the Postgres commit and never able to fail it.
+    mdb = get_mongo_db()
+    if mdb is not None:
+        from app.services.profiles import create_base_profile
+
+        create_base_profile(mdb, patient, actor_id=actor_id)
     return patient
 
 

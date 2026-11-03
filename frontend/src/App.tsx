@@ -12,6 +12,7 @@ import { NotFoundPage } from './routes/NotFoundPage'
 import { PatientsPage } from './routes/PatientsPage'
 import { QueuePage } from './routes/QueuePage'
 import { SchedulePage } from './routes/SchedulePage'
+import { StaffPage } from './routes/StaffPage'
 
 export function App() {
   return (
@@ -27,6 +28,7 @@ export function App() {
                 <Routes>
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/patients" element={<PatientsPage />} />
+                  <Route path="/staff" element={<StaffPage />} />
                   <Route path="/schedule" element={<SchedulePage />} />
                   <Route path="/queue" element={<QueuePage />} />
                   <Route path="/emergency" element={<EmergencyPage />} />

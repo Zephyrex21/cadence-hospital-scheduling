@@ -137,4 +137,32 @@ describe('apiFetch against a sleeping backend', () => {
     expect(onExpired).toHaveBeenCalled()
     window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired)
   })
+
+  it('turns a FastAPI validation error into a readable message instead of "Request failed"', async () => {
+    stubFetch({
+      '/health': () => healthy(),
+      '/patients/1/profile': () =>
+        json(
+          {
+            detail: [
+              {
+                type: 'string_pattern_mismatch',
+                loc: ['body', 'address', 'pin_code'],
+                msg: 'String should match pattern',
+              },
+            ],
+          },
+          422,
+        ),
+    })
+
+    const caught = apiFetch('/patients/1/profile', { method: 'PUT', body: {} }).catch(
+      (e: unknown) => e,
+    )
+    await vi.advanceTimersByTimeAsync(2_000)
+    const err = await caught
+
+    expect(err).toMatchObject({ status: 422, code: 'validation_error' })
+    expect((err as ApiError).message).toBe('address › pin_code: String should match pattern')
+  })
 })
