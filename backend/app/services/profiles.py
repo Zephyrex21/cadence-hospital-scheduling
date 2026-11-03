@@ -41,7 +41,7 @@ from app.mongo.models import (
 from app.services.audit import record_audit
 from app.services.patients import get_patient
 
-log = logging.getLogger("cadence.profiles")
+log = logging.getLogger("uvicorn.error.cadence.profiles")
 
 # Which patient-profile sections each role may write. Doctors are read-only, matching
 # the existing rule that doctors don't register or edit patient records.

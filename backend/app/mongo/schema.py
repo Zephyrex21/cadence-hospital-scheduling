@@ -13,7 +13,7 @@ from typing import Any
 PATIENTS = "patients"
 STAFF = "staff_profiles"
 
-_log = logging.getLogger("cadence.mongo")
+_log = logging.getLogger("uvicorn.error.cadence.mongo")
 
 _INT = ["int", "long"]
 

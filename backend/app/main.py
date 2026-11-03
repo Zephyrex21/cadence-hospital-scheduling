@@ -28,7 +28,7 @@ from app.core.config import settings
 from app.core.errors import AppError, app_error_handler
 from app.core.migrate import run_migrations
 
-_log = logging.getLogger("cadence.main")
+_log = logging.getLogger("uvicorn.error.cadence.main")
 
 
 def _bootstrap_mongo() -> None:
