@@ -14,10 +14,14 @@ from app.core.clock import clinic_day_bounds
 from app.core.config import settings
 from app.core.enums import AppointmentOrigin, AppointmentStatus, Role
 from app.models.appointment import Appointment
+from app.models.audit import AuditLog
+from app.models.decision import SchedulingDecision
+from app.models.displacement import AppointmentDisplacement
 from app.models.appointment_type import AppointmentType
 from app.models.doctor import DoctorProfile
 from app.models.patient import Patient
 from app.models.shift import Shift
+from app.models.triage import TriageAssessment
 from app.models.user import User
 
 IST = "Asia/Kolkata"
@@ -145,8 +149,8 @@ def test_seed_upgrades_old_placeholder_data_in_place(
     assert db_session.scalar(select(Patient.name).where(Patient.mrn == "CAD-777777")) == (
         "Registered By Hand"
     )
-    # Shifts are IST sessions (09:00-13:00 / 14:00-18:00 IST) for every demo doctor, 14 days.
-    assert db_session.scalar(select(func.count()).select_from(Shift)) == 3 * 14 * 2
+    # Shifts are IST sessions (09:00-13:00 / 14:00-22:00 IST) for every demo doctor, 14 days.
+    assert db_session.scalar(select(func.count()).select_from(Shift)) == 6 * 14 * 2
     first = db_session.scalars(select(Shift).order_by(Shift.start_utc)).first()
     assert first is not None and first.start_utc.astimezone(settings.clinic_tz).hour in (9, 14)
     assert db_session.scalar(select(func.count()).select_from(Appointment)) >= 4
@@ -164,6 +168,40 @@ def test_seed_is_idempotent(db_session: Session, seed_module) -> None:  # type: 
     seed_module.seed(quiet=True)
     db_session.expire_all()
     assert counts() == before
+
+
+def test_seed_builds_a_populated_operational_demo_and_is_idempotent(
+    db_session: Session, seed_module  # type: ignore[no-untyped-def]
+) -> None:
+    seed_module.seed(quiet=True)
+    db_session.expire_all()
+
+    assert db_session.scalar(select(func.count()).select_from(Patient)) == 64
+    assert db_session.scalar(select(func.count()).select_from(DoctorProfile)) == 6
+    assert db_session.scalar(select(func.count()).select_from(Appointment)) >= 120
+    assert db_session.scalar(select(func.count()).select_from(TriageAssessment)) >= 8
+    assert db_session.scalar(select(func.count()).select_from(SchedulingDecision)) >= 3
+    assert db_session.scalar(select(func.count()).select_from(AppointmentDisplacement)) >= 1
+    assert db_session.scalar(select(func.count()).select_from(AuditLog)) >= 100
+
+    from app.services.dashboard import summary
+
+    now = datetime.now(UTC)
+    dashboard = summary(db_session, now)
+    assert dashboard["total_waiting"] > 0
+    assert dashboard["in_progress"] > 0
+    assert dashboard["completed_today"] > 0
+    assert dashboard["displaced_today"] >= 1
+    assert dashboard["escalations_pending"] >= 1
+    assert len(dashboard["doctor_load"]) == 6
+
+    tables = (User, Patient, Shift, Appointment, TriageAssessment,
+              SchedulingDecision, AppointmentDisplacement, AuditLog)
+    before = [db_session.scalar(select(func.count()).select_from(table)) for table in tables]
+    seed_module.seed(quiet=True)
+    db_session.expire_all()
+    after = [db_session.scalar(select(func.count()).select_from(table)) for table in tables]
+    assert after == before
 
 
 def test_demo_refresh_never_blocks_startup_in_production_without_password(

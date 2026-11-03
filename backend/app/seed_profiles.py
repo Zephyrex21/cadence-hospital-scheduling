@@ -69,6 +69,45 @@ _PATIENT_EXTRAS: dict[str, dict[str, Any]] = {
 }
 
 
+_CITY_DETAILS: dict[str, tuple[str, str, str]] = {
+    "New Delhi": ("Delhi", "110058", "Janakpuri"),
+    "Bengaluru": ("Karnataka", "560038", "Indiranagar"),
+    "Hyderabad": ("Telangana", "500034", "Banjara Hills"),
+    "Kolkata": ("West Bengal", "700019", "Gariahat"),
+    "Ludhiana": ("Punjab", "141002", "Model Town"),
+    "Chennai": ("Tamil Nadu", "600017", "T. Nagar"),
+    "Pune": ("Maharashtra", "411038", "Kothrud"),
+    "Mumbai": ("Maharashtra", "400050", "Bandra West"),
+    "Ahmedabad": ("Gujarat", "380009", "Navrangpura"),
+    "Vijayawada": ("Andhra Pradesh", "520010", "Benz Circle"),
+    "Kochi": ("Kerala", "682020", "Palarivattom"),
+    "Jaipur": ("Rajasthan", "302016", "Vaishali Nagar"),
+    "Lucknow": ("Uttar Pradesh", "226010", "Gomti Nagar"),
+    "Bhopal": ("Madhya Pradesh", "462016", "Arera Colony"),
+    "Chandigarh": ("Chandigarh", "160017", "Sector 22"),
+    "Guwahati": ("Assam", "781005", "Dispur"),
+}
+
+
+def _generic_patient_sections(patient: Patient) -> dict[str, Any]:
+    state, pin, locality = _CITY_DETAILS.get(
+        patient.city or "New Delhi", _CITY_DETAILS["New Delhi"]
+    )
+    language_by_state = {
+        "Delhi": "hi", "Karnataka": "kn", "Telangana": "te",
+        "West Bengal": "bn", "Punjab": "pa", "Tamil Nadu": "ta",
+        "Maharashtra": "mr", "Gujarat": "gu", "Andhra Pradesh": "te",
+        "Kerala": "ml", "Rajasthan": "hi", "Uttar Pradesh": "hi",
+        "Madhya Pradesh": "hi", "Chandigarh": "hi", "Assam": "as",
+    }
+    return _patient(
+        patient.city or "New Delhi",
+        f"Demo residence, {locality}", state, pin,
+        language_by_state.get(state, "en"), "Not recorded",
+        conditions=tuple([patient.notes]) if patient.notes and "allergy" not in patient.notes.lower() else (),
+    )
+
+
 def _qual(degree: str, institution: str, year: int) -> dict[str, Any]:
     return {"degree": degree, "institution": institution, "year": year}
 
@@ -81,6 +120,14 @@ _STAFF_EXTRAS: dict[str, dict[str, Any]] = {
         "reception": {"counter": "Front desk 1", "shift_pattern": "day",
                       "training": ["Patient registration", "Triage handoff"]},
     },
+    "receptionist2@cadence.dev": {
+        "employee_id": "REC-002", "department": "Appointments & registration",
+        "languages": ["en", "hi", "pa"],
+        "contact": {"phone": "+91 90000 30007"},
+        "employment": {"joined_on": date(2022, 3, 14).isoformat(), "status": "active"},
+        "reception": {"counter": "Front desk 2", "shift_pattern": "rotating",
+                      "training": ["Appointment booking", "Patient records"]},
+    },
     "nurse@cadence.dev": {
         "employee_id": "NUR-001", "department": "Emergency & triage",
         "languages": ["en", "hi", "pa"], "contact": {"phone": "+91 90000 30002"},
@@ -92,6 +139,21 @@ _STAFF_EXTRAS: dict[str, dict[str, Any]] = {
                 {"name": "BLS", "expires_on": date(2027, 3, 31).isoformat()},
                 {"name": "ACLS", "expires_on": date(2027, 9, 30).isoformat()},
                 {"name": "Emergency triage", "expires_on": date(2028, 1, 31).isoformat()},
+            ],
+            "ward": "Emergency", "shift_pattern": "rotating",
+        },
+    },
+    "nurse2@cadence.dev": {
+        "employee_id": "NUR-002", "department": "Emergency & triage",
+        "languages": ["en", "hi", "ur"],
+        "contact": {"phone": "+91 90000 30008"},
+        "employment": {"joined_on": date(2020, 7, 6).isoformat(), "status": "active"},
+        "nurse": {
+            "registration": {"council": "Delhi Nursing Council", "number": "DNC-59326"},
+            "qualifications": [_qual("B.Sc Nursing", "Jamia Hamdard College of Nursing", 2017)],
+            "certifications": [
+                {"name": "BLS", "expires_on": date(2027, 6, 30).isoformat()},
+                {"name": "ACLS", "expires_on": date(2027, 12, 31).isoformat()},
             ],
             "ward": "Emergency", "shift_pattern": "rotating",
         },
@@ -132,6 +194,42 @@ _STAFF_EXTRAS: dict[str, dict[str, Any]] = {
             "experience_years": 11, "consultation_fee_inr": 1000,
         },
     },
+    "doctor4@cadence.dev": {
+        "employee_id": "DOC-004", "department": "Paediatrics", "languages": ["en", "hi"],
+        "contact": {"phone": "+91 90000 30009"},
+        "employment": {"joined_on": date(2019, 9, 2).isoformat(), "status": "active"},
+        "doctor": {
+            "registration": {"council": "Delhi Medical Council", "number": "DMC-40218"},
+            "qualifications": [_qual("MBBS", "Lady Hardinge Medical College", 2011),
+                               _qual("MD (Paediatrics)", "AIIMS Delhi", 2015)],
+            "sub_specialties": ["Child health", "Preventive paediatrics"],
+            "experience_years": 10, "consultation_fee_inr": 700,
+        },
+    },
+    "doctor5@cadence.dev": {
+        "employee_id": "DOC-005", "department": "Orthopaedics", "languages": ["en", "hi", "mr"],
+        "contact": {"phone": "+91 90000 30010"},
+        "employment": {"joined_on": date(2017, 11, 13).isoformat(), "status": "active"},
+        "doctor": {
+            "registration": {"council": "Delhi Medical Council", "number": "DMC-42761"},
+            "qualifications": [_qual("MBBS", "Seth GS Medical College", 2008),
+                               _qual("MS (Orthopaedics)", "KEM Hospital", 2012)],
+            "sub_specialties": ["Sports injury", "Joint care"],
+            "experience_years": 14, "consultation_fee_inr": 800,
+        },
+    },
+    "doctor6@cadence.dev": {
+        "employee_id": "DOC-006", "department": "Dermatology", "languages": ["en", "hi"],
+        "contact": {"phone": "+91 90000 30011"},
+        "employment": {"joined_on": date(2021, 2, 8).isoformat(), "status": "active"},
+        "doctor": {
+            "registration": {"council": "Delhi Medical Council", "number": "DMC-45109"},
+            "qualifications": [_qual("MBBS", "University College of Medical Sciences", 2012),
+                               _qual("MD (Dermatology)", "AIIMS Delhi", 2016)],
+            "sub_specialties": ["Clinical dermatology", "Allergy-related skin care"],
+            "experience_years": 9, "consultation_fee_inr": 750,
+        },
+    },
     "admin@cadence.dev": {
         "employee_id": "ADM-001", "department": "Administration",
         "languages": ["en", "hi", "pa"], "contact": {"phone": "+91 90000 30006"},
@@ -153,11 +251,14 @@ def _merge(legacy: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
 
 def seed_profiles(db: Session, mdb: Any) -> None:
     """Create rich demo profiles; sections that already exist are never overwritten."""
-    patients = {p.mrn: p for p in db.scalars(select(Patient))}
-    for mrn, extra in _PATIENT_EXTRAS.items():
-        patient = patients.get(mrn)
-        if patient is None:
-            continue
+    # Only enrich the synthetic seed records. Patient profiles entered by a user
+    # remain untouched, even when their MRN happens to resemble a demo MRN.
+    from app.seed import _PATIENTS
+
+    demo_mrns = [row[0] for row in _PATIENTS]
+    patients = {p.mrn: p for p in db.scalars(select(Patient).where(Patient.mrn.in_(demo_mrns)))}
+    for patient in patients.values():
+        extra = _PATIENT_EXTRAS.get(patient.mrn) or _generic_patient_sections(patient)
         wanted = _merge(sections_from_legacy(patient), extra)
         existing = repo.get_patient_doc(mdb, patient.id) or {}
         missing = {k: v for k, v in wanted.items() if k not in existing}

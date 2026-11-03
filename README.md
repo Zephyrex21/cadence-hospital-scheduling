@@ -129,12 +129,31 @@ Open **http://localhost:5173** and sign in. The dev server proxies `/api/*` to t
 
 | Email                     | Role          | Can do                                      |
 | ------------------------- | ------------- | ------------------------------------------- |
-| `admin@cadence.dev`       | Administrator | everything, incl. Decisions & audit         |
-| `nurse@cadence.dev`       | Triage nurse  | triage, book, emergency plan/commit, queue   |
-| `receptionist@cadence.dev`| Receptionist  | book, emergency plan/commit                  |
-| `doctor@cadence.dev`      | Doctor        | manage own consultations (queue status)      |
+| `admin@cadence.dev`        | Administrator | everything, incl. Decisions & audit            |
+| `receptionist@cadence.dev` | Receptionist  | book, emergency plan/commit                    |
+| `receptionist2@cadence.dev`| Receptionist  | second front-desk account                      |
+| `nurse@cadence.dev`        | Triage nurse  | triage, book, emergency plan/commit, queue     |
+| `nurse2@cadence.dev`       | Triage nurse  | second triage account                          |
+| `doctor@cadence.dev`       | Doctor        | General Medicine consultations                 |
+| `doctor2@cadence.dev`      | Doctor        | General Medicine consultations                 |
+| `doctor3@cadence.dev`      | Doctor        | Cardiology consultations                       |
+| `doctor4@cadence.dev`      | Doctor        | Paediatrics consultations                      |
+| `doctor5@cadence.dev`      | Doctor        | Orthopaedics consultations                     |
+| `doctor6@cadence.dev`      | Doctor        | Dermatology consultations                      |
 
-Sign in as **admin** to see the full product in one account.
+All seeded accounts share the configured seed password (`cadence123` only in local
+development). Sign in as **admin** to see the full product in one account.
+
+### What's in the demo dataset
+
+The default seed now creates 64 fictitious patients, 11 staff accounts (including six
+specialists), 14 days of doctor shifts, roughly 120 appointments across today and the next
+six days, triage examples across acuity A1–A5, emergency scheduling decisions, a displacement,
+a pending clinician-review escalation, a resolved historical escalation, and a populated
+audit trail. When MongoDB is configured, the same patient and staff records also receive
+structured profile sections. The exact live counts depend on the current clinic time and
+whether existing appointments already occupy a seeded patient's slot. See
+[docs/DEMO_DATA.md](docs/DEMO_DATA.md) for the seed behavior and deployment instructions.
 
 ## Alternative: PostgreSQL via Docker
 
