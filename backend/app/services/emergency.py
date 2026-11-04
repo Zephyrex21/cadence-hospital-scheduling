@@ -497,12 +497,19 @@ def _escalation_record(db: Session, decision_id: int, *, lock: bool) -> Scheduli
     return record
 
 
+def is_plan(candidate: Any) -> bool:
+    """Is this stored JSON a real engine plan (not a placeholder or hand-written label)?"""
+    return isinstance(candidate, dict) and "placement" in candidate and "moves" in candidate
+
+
 def _options(record: SchedulingDecision) -> list[dict[str, Any]]:
+    """The reviewable plans of a decision. Anything that isn't a plan is ignored, so a
+    malformed row yields "no options — handle manually" instead of an HTTP 500."""
     options: list[dict[str, Any]] = []
     if record.chosen_plan:
         options.append(record.chosen_plan)
     options.extend(record.alternatives or [])
-    return options
+    return [o for o in options if is_plan(o)]
 
 
 def escalation_options(db: Session, decision_id: int) -> dict[str, Any]:

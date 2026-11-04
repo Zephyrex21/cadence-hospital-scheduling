@@ -29,6 +29,7 @@ from app.core.enums import (
     AuditAction,
     Role,
 )
+from app.core.errors import AppError
 from app.core.security import hash_password
 from app.models.appointment import Appointment
 from app.models.appointment_type import AppointmentType
@@ -40,6 +41,7 @@ from app.models.patient import Patient
 from app.models.shift import Shift
 from app.models.triage import TriageAssessment
 from app.models.user import User
+from app.services.emergency import commit_emergency, is_plan, plan_emergency
 
 log = logging.getLogger("uvicorn.error.cadence.seed")
 
@@ -656,6 +658,37 @@ def _decision_key(kind: str, day: date) -> str:
     return f"cadence-demo-{kind}-{day.isoformat()}"
 
 
+def _is_broken_demo_escalation(record: SchedulingDecision) -> bool:
+    """An unresolved *demo* escalation whose stored options aren't real plans."""
+    plans = ([record.chosen_plan] if record.chosen_plan else []) + list(record.alternatives or [])
+    return (
+        record.status == "escalated"
+        and record.resolved_at is None
+        and (record.idempotency_key or "").startswith("cadence-demo-")
+        and not all(is_plan(p) for p in plans)
+    )
+
+
+def _escalate_through_engine(
+    db: Session, *, nurse: User, patient: Patient, appt_type: AppointmentType, key: str
+) -> SchedulingDecision | None:
+    """Record an A1 escalation exactly as the app does: plan, then commit.
+
+    A1 is never auto-applied, so the commit only stores the engine's plans for a clinician.
+    Never raises: a demo row must not stop the API from booting.
+    """
+    try:
+        plan = plan_emergency(db, patient_id=patient.id, type_id=appt_type.id, acuity=Acuity.A1)
+        commit_emergency(
+            db, actor_id=nurse.id, patient_id=patient.id, type_id=appt_type.id,
+            acuity=Acuity.A1, fingerprint=plan["fingerprint"], idempotency_key=key,
+        )
+    except AppError as exc:
+        log.info("Skipped the demo A1 escalation: %s", exc)
+        return None
+    return db.scalar(select(SchedulingDecision).where(SchedulingDecision.idempotency_key == key))
+
+
 def _ensure_decision_scenarios(db: Session) -> None:
     now = datetime.now(UTC)
     local_day = now.astimezone(settings.clinic_tz).date()
@@ -802,40 +835,34 @@ def _ensure_decision_scenarios(db: Session) -> None:
                 log.info("Skipped demonstration emergency displacement; schedule is occupied")
 
     # An A1 scenario deliberately remains pending: the app's policy requires human direction.
+    # It is recorded by the real planner + commit (never hand-written), so its options are
+    # genuine plans a clinician can review and apply.
     escalation_key = _decision_key("escalation", local_day)
     pending = db.scalar(select(SchedulingDecision).where(
         SchedulingDecision.idempotency_key == escalation_key
     ))
-    critical_patient = patients.get("CAD-100063")
-    if pending is None and nurse is not None and critical_patient is not None:
-        pending = SchedulingDecision(
-            trigger="emergency_insert",
-            status="escalated",
-            engine_version="cadence-demo-1.0",
-            actor_id=nurse.id,
-            patient_id=critical_patient.id,
-            emergency_appointment_id=None,
-            idempotency_key=escalation_key,
-            request_hash=hashlib.sha256(escalation_key.encode()).hexdigest(),
-            input_snapshot={"patient_id": critical_patient.id,
-                            "acuity": Acuity.A1.value,
-                            "demo_record": True},
-            chosen_plan=None,
-            alternatives=[{"status": "manual_review", "label": "Clinician-directed placement"}],
-            parameters={"max_displacements": 2, "max_auto_displaced": 1,
-                        "max_auto_delay_min": 30},
-            reasons=["acuity_a1_human_directed"],
-            created_at=now - timedelta(minutes=9),
-        )
-        db.add(pending)
+    if pending is not None and _is_broken_demo_escalation(pending):
+        # Written by an older seed with placeholder options; replace it with a real one.
+        db.delete(pending)
         db.flush()
-        _add_audit_once(
-            db, entity_type="scheduling_decision", entity_id=pending.id,
-            action=AuditAction.CREATE, actor_id=nurse.id,
-            reason="Demo seed: A1 escalation awaits clinician review",
-            after={"patient_id": critical_patient.id, "status": "escalated"},
-            created_at=now - timedelta(minutes=9),
+        pending = None
+    critical_patient = patients.get("CAD-100063")
+    if pending is None and nurse is not None and critical_patient is not None \
+            and cardiology_type is not None:
+        db.flush()
+        pending = _escalate_through_engine(
+            db, nurse=nurse, patient=critical_patient, appt_type=cardiology_type,
+            key=escalation_key,
         )
+        if pending is not None:
+            pending.created_at = now - timedelta(minutes=9)
+            _add_audit_once(
+                db, entity_type="scheduling_decision", entity_id=pending.id,
+                action=AuditAction.CREATE, actor_id=nurse.id,
+                reason="Demo seed: A1 escalation awaits clinician review",
+                after={"patient_id": critical_patient.id, "status": "escalated"},
+                created_at=now - timedelta(minutes=9),
+            )
 
     # A resolved historical escalation demonstrates the governance workflow too.
     resolved_key = _decision_key("resolved", local_day)
