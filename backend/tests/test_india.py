@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
+import time_machine
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -14,10 +16,10 @@ from app.core.clock import clinic_day_bounds
 from app.core.config import settings
 from app.core.enums import AppointmentOrigin, AppointmentStatus, Role
 from app.models.appointment import Appointment
+from app.models.appointment_type import AppointmentType
 from app.models.audit import AuditLog
 from app.models.decision import SchedulingDecision
 from app.models.displacement import AppointmentDisplacement
-from app.models.appointment_type import AppointmentType
 from app.models.doctor import DoctorProfile
 from app.models.patient import Patient
 from app.models.shift import Shift
@@ -170,6 +172,16 @@ def test_seed_is_idempotent(db_session: Session, seed_module) -> None:  # type: 
     assert counts() == before
 
 
+@pytest.fixture()
+def clinic_afternoon() -> Iterator[None]:
+    """15:10 IST on a fixed day. The seeded "live" scenario (patients in consultation) only
+    exists while the clinic is open, so tests about it must not depend on the wall clock."""
+    when = datetime(2026, 11, 4, 15, 10, tzinfo=ZoneInfo("Asia/Kolkata"))
+    with time_machine.travel(when, tick=False):
+        yield
+
+
+@pytest.mark.usefixtures("clinic_afternoon")
 def test_seed_builds_a_populated_operational_demo_and_is_idempotent(
     db_session: Session, seed_module  # type: ignore[no-untyped-def]
 ) -> None:
@@ -227,3 +239,60 @@ def test_app_startup_refreshes_demo_data_only_when_enabled(monkeypatch: pytest.M
     with TestClient(create_app()):
         pass
     assert calls == [1]
+
+
+def test_seed_hashes_the_password_once_and_skips_it_on_a_restart(
+    db_session: Session, seed_module, monkeypatch: pytest.MonkeyPatch  # type: ignore[no-untyped-def]
+) -> None:
+    """Every hash is deliberately slow (argon2). On a free host the seed used to re-hash all
+    staff passwords on every cold start, which dominated the wake-up time."""
+    from app.core import security
+
+    monkeypatch.setattr(settings, "seed_password", "first-demo-password")
+    calls = {"hash": 0, "verify": 0}
+    real_hash, real_verify = security.hash_password, security.verify_password
+
+    def counting_hash(plain: str) -> str:
+        calls["hash"] += 1
+        return real_hash(plain)
+
+    def counting_verify(plain: str, hashed: str) -> bool:
+        calls["verify"] += 1
+        return real_verify(plain, hashed)
+
+    monkeypatch.setattr(seed_module, "hash_password", counting_hash)
+    monkeypatch.setattr(seed_module, "verify_password", counting_verify, raising=False)
+
+    seed_module.seed(quiet=True)  # first ever boot: one shared hash for all accounts
+    assert calls["hash"] == 1
+
+    calls.update(hash=0, verify=0)
+    seed_module.seed(quiet=True)  # a later cold start with an unchanged password
+    assert calls["hash"] == 0 and calls["verify"] <= 1
+
+    calls.update(hash=0, verify=0)
+    monkeypatch.setattr(settings, "seed_password", "second-demo-password")
+    seed_module.seed(quiet=True)  # the password was changed: rotate everyone, still one hash
+    assert calls["hash"] == 1
+    db_session.expire_all()
+    users = list(db_session.scalars(select(User).where(User.email.like("%@cadence.dev"))))
+    assert len(users) >= 11
+    assert all(real_verify("second-demo-password", u.password_hash) for u in users)
+
+
+@pytest.mark.parametrize(
+    "hhmm", ["09:10", "10:10", "11:10", "11:20", "11:40", "12:10", "14:10", "17:10", "20:10"]
+)
+def test_someone_is_always_in_consultation_while_the_clinic_is_open(
+    db_session: Session, seed_module, hhmm: str  # type: ignore[no-untyped-def]
+) -> None:
+    """The demo dashboard must not look dead during opening hours (13:00–14:00 is the lunch
+    closure). 11:00–11:30 used to be an empty patch between the morning slots and the live one."""
+    from app.services.dashboard import summary
+
+    hour, minute = (int(x) for x in hhmm.split(":"))
+    when = datetime(2026, 11, 4, hour, minute, tzinfo=ZoneInfo("Asia/Kolkata"))
+    with time_machine.travel(when, tick=False):
+        seed_module.seed(quiet=True)
+        db_session.expire_all()
+        assert summary(db_session, datetime.now(tz=when.tzinfo))["in_progress"] > 0

@@ -1,4 +1,4 @@
-import { forwardRef, type TextareaHTMLAttributes } from 'react'
+import { forwardRef, useId, type TextareaHTMLAttributes } from 'react'
 
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label: string
@@ -11,7 +11,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
   { label, error, hint, id, className = '', ...rest },
   ref,
 ) {
-  const fieldId = id ?? rest.name
+  const generatedId = useId()
+  const fieldId = id ?? rest.name ?? generatedId
   const errorId = error ? `${fieldId}-error` : undefined
   const hintId = hint && !error ? `${fieldId}-hint` : undefined
   return (

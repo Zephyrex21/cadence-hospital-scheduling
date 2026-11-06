@@ -16,6 +16,7 @@ export const LANGUAGES: Record<string, string> = {
   pa: 'Punjabi',
   ur: 'Urdu',
   or: 'Odia',
+  as: 'Assamese',
 }
 
 export const languageName = (code: string) => LANGUAGES[code] ?? code

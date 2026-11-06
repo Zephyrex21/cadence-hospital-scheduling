@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from pymongo.errors import CollectionInvalid, OperationFailure
+
 PATIENTS = "patients"
 STAFF = "staff_profiles"
 
@@ -59,15 +61,25 @@ _STAFF_VALIDATOR = {
 
 
 def _apply_validator(mdb: Any, name: str, validator: dict[str, Any]) -> None:
-    if name in mdb.list_collection_names():
-        mdb.command("collMod", name, validator=validator, validationLevel="moderate")
-    else:
+    existing = list(mdb.list_collections(filter={"name": name}))
+    if not existing:
         mdb.create_collection(name, validator=validator, validationLevel="moderate")
+        return
+    if (existing[0].get("options") or {}).get("validator") == validator:
+        return  # already current — nothing to send (Atlas free tiers refuse collMod)
+    mdb.command("collMod", name, validator=validator, validationLevel="moderate")
 
 
 def apply_validators(mdb: Any) -> None:
-    _apply_validator(mdb, PATIENTS, _PATIENT_VALIDATOR)
-    _apply_validator(mdb, STAFF, _STAFF_VALIDATOR)
+    """Best effort: a cluster that refuses ``collMod`` keeps whatever validator it has,
+    and must not stop the indexes / backfill that follow."""
+    for name, validator in ((PATIENTS, _PATIENT_VALIDATOR), (STAFF, _STAFF_VALIDATOR)):
+        try:
+            _apply_validator(mdb, name, validator)
+        except (OperationFailure, CollectionInvalid) as exc:
+            _log.warning(
+                "Could not apply the %s validator (%s); continuing without updating it.", name, exc
+            )
 
 
 def ensure_indexes(mdb: Any) -> None:

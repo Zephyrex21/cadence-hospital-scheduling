@@ -1,5 +1,5 @@
 import { ChevronDown } from './icons'
-import { forwardRef, type ReactNode, type SelectHTMLAttributes } from 'react'
+import { forwardRef, useId, type ReactNode, type SelectHTMLAttributes } from 'react'
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string
@@ -15,7 +15,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   { label, error, id, className = '', children, ...rest },
   ref,
 ) {
-  const selectId = id ?? rest.name
+  const generatedId = useId()
+  const selectId = id ?? rest.name ?? generatedId
   const errorId = error ? `${selectId}-error` : undefined
   const control = (
     <div className="relative">

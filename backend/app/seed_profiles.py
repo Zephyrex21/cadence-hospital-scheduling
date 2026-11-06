@@ -89,6 +89,40 @@ _CITY_DETAILS: dict[str, tuple[str, str, str]] = {
 }
 
 
+_STREETS = ["MG Road", "Station Road", "Gandhi Nagar", "Park Street", "Lake View Road",
+            "Temple Road", "Model Colony", "Civil Lines"]
+_ADULT_JOBS = ["Teacher", "Accountant", "Software engineer", "Shopkeeper", "Bank officer",
+               "Civil engineer", "Homemaker", "Driver", "Businessperson", "Nurse",
+               "Government clerk", "Electrician"]
+
+
+def _street_address(patient: Patient, locality: str) -> str:
+    return f"{10 + (patient.id * 7) % 90}, {_STREETS[patient.id % len(_STREETS)]}, {locality}"
+
+
+def _occupation(patient: Patient) -> str:
+    age = 2026 - patient.date_of_birth.year
+    if age < 18:
+        return "Student"
+    if age < 25:
+        return ["Student", "Intern", "Trainee technician"][patient.id % 3]
+    if age >= 65:
+        return "Retired"
+    return _ADULT_JOBS[patient.id % len(_ADULT_JOBS)]
+
+
+def _is_placeholder_section(name: str, value: Any) -> bool:
+    """Filler written by an older version of this seed. A real edit never looks like this,
+    so these (and only these) are safe to replace on an already-seeded database."""
+    if name == "emergency_contacts":
+        return any(str(c.get("name", "")).startswith("Demo family contact") for c in value or [])
+    if name == "address":
+        return str((value or {}).get("line1", "")).startswith("Demo residence")
+    if name == "demographics":
+        return (value or {}).get("occupation") == "Not recorded"
+    return False
+
+
 def _generic_patient_sections(patient: Patient) -> dict[str, Any]:
     state, pin, locality = _CITY_DETAILS.get(
         patient.city or "New Delhi", _CITY_DETAILS["New Delhi"]
@@ -102,9 +136,13 @@ def _generic_patient_sections(patient: Patient) -> dict[str, Any]:
     }
     return _patient(
         patient.city or "New Delhi",
-        f"Demo residence, {locality}", state, pin,
-        language_by_state.get(state, "en"), "Not recorded",
-        conditions=tuple([patient.notes]) if patient.notes and "allergy" not in patient.notes.lower() else (),
+        _street_address(patient, locality), state, pin,
+        language_by_state.get(state, "en"), _occupation(patient),
+        conditions=(
+            (patient.notes,)
+            if patient.notes and "allergy" not in patient.notes.lower()
+            else ()
+        ),
     )
 
 
@@ -261,7 +299,8 @@ def seed_profiles(db: Session, mdb: Any) -> None:
         extra = _PATIENT_EXTRAS.get(patient.mrn) or _generic_patient_sections(patient)
         wanted = _merge(sections_from_legacy(patient), extra)
         existing = repo.get_patient_doc(mdb, patient.id) or {}
-        missing = {k: v for k, v in wanted.items() if k not in existing}
+        missing = {k: v for k, v in wanted.items()
+                   if k not in existing or _is_placeholder_section(k, existing[k])}
         if missing or not existing:
             repo.upsert_patient_doc(mdb, patient_id=patient.id, mrn=patient.mrn,
                                     sections=missing, actor_id=None)

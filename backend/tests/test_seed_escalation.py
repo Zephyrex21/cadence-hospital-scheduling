@@ -41,9 +41,9 @@ def seed_at(db_session: Session, monkeypatch: pytest.MonkeyPatch) -> Callable[[s
     monkeypatch.setattr(settings, "clinic_timezone", "Asia/Kolkata")
 
     @contextmanager
-    def go(hhmm: str, *, seed: bool = True) -> Iterator[None]:
+    def go(hhmm: str, *, seed: bool = True, day: int = 4) -> Iterator[None]:
         hour, minute = (int(x) for x in hhmm.split(":"))
-        with time_machine.travel(datetime(2026, 11, 4, hour, minute, tzinfo=IST), tick=False):
+        with time_machine.travel(datetime(2026, 11, day, hour, minute, tzinfo=IST), tick=False):
             if seed:
                 seed_mod.seed(quiet=True)
             yield
@@ -183,3 +183,102 @@ def test_reseeding_never_touches_a_non_demo_escalation(
         assert still is not None and still.alternatives == [
             {"status": "manual_review", "label": "Clinician-directed placement"}
         ]
+
+
+# --- the demo keeps running for days: Render restarts on a later day ------------------
+
+
+def _inbox(db: Session) -> list[SchedulingDecision]:
+    db.expire_all()
+    return list(
+        db.scalars(
+            select(SchedulingDecision).where(
+                SchedulingDecision.status == "escalated",
+                SchedulingDecision.resolved_at.is_(None),
+            )
+        )
+    )
+
+
+def test_the_next_days_seed_replaces_yesterdays_escalation_with_a_fresh_real_one(
+    client: TestClient, db_session: Session, seed_at: Any, auth_headers: Headers
+) -> None:
+    with seed_at("17:30", day=3):
+        yesterday = _pending(db_session).idempotency_key
+    with seed_at("15:30", day=4):  # next day's restart, same database
+        inbox = _inbox(db_session)
+        assert len(inbox) == 1, "yesterday's demo escalation must not pile up in the inbox"
+        assert inbox[0].idempotency_key != yesterday
+        resp = client.get(
+            f"/escalations/{inbox[0].id}/options", headers=auth_headers(_admin(db_session))
+        )
+        assert resp.status_code == 200 and resp.json()["options"], "…and it has real options"
+
+
+def test_a_database_broken_by_the_old_seed_heals_on_a_later_day(
+    client: TestClient, db_session: Session, seed_at: Any, auth_headers: Headers
+) -> None:
+    """The state seen on the live site: yesterday's placeholder row still in the inbox."""
+    with seed_at("17:30", day=3):
+        _make_legacy_placeholder(db_session, _pending(db_session))
+    with seed_at("15:30", day=4):
+        inbox = _inbox(db_session)
+        assert len(inbox) == 1
+        resp = client.get(
+            f"/escalations/{inbox[0].id}/options", headers=auth_headers(_admin(db_session))
+        )
+        assert resp.status_code == 200 and resp.json()["options"]
+
+
+def test_demo_triage_is_re_dated_each_day_but_not_reset_within_a_day(
+    db_session: Session, seed_at: Any
+) -> None:
+    import app.seed as seed_mod
+    from app.models.patient import Patient
+    from app.models.triage import TriageAssessment
+
+    def a1_triage() -> TriageAssessment:
+        db_session.expire_all()
+        patient = db_session.scalar(select(Patient).where(Patient.mrn == "CAD-100063"))
+        assert patient is not None
+        row = db_session.scalar(
+            select(TriageAssessment).where(TriageAssessment.patient_id == patient.id)
+        )
+        assert row is not None
+        return row
+
+    with seed_at("17:30", day=3):
+        first = a1_triage().assessed_at
+    with seed_at("15:30", day=4):
+        moved = a1_triage()
+        assert moved.assessed_at > first, "a new demo day re-dates the assessment"
+        assert moved.consumed_at is None
+        moved.consumed_at = moved.assessed_at  # a clinician acted on it this morning
+        db_session.commit()
+    with seed_at("15:45", day=4, seed=False):  # same-day restart
+        seed_mod.seed(quiet=True)
+        assert a1_triage().consumed_at is not None, "a same-day restart must not undo that"
+
+
+# --- how a clinician resolves it --------------------------------------------------------
+
+
+def test_a_nurse_can_resolve_the_escalation_with_a_note_and_a_doctor_cannot(
+    client: TestClient, db_session: Session, seed_at: Any, auth_headers: Headers
+) -> None:
+    with seed_at("15:10"):
+        pending = _pending(db_session)
+        nurse = db_session.scalar(select(User).where(User.email == "nurse@cadence.dev"))
+        doctor = db_session.scalar(select(User).where(User.email == "doctor@cadence.dev"))
+        assert nurse is not None and doctor is not None
+        url = f"/scheduling-decisions/{pending.id}/resolve"
+        body = {"note": "Moved to the cardiology bay and informed the on-call doctor."}
+
+        assert client.post(url, json=body, headers=auth_headers(doctor)).status_code == 403
+
+        done = client.post(url, json=body, headers=auth_headers(nurse))
+        assert done.status_code == 200, done.text
+        assert _inbox(db_session) == []  # gone from the Escalation inbox
+
+        again = client.post(url, json=body, headers=auth_headers(nurse))
+        assert again.status_code == 409  # can't be resolved twice

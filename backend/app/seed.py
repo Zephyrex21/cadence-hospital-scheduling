@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
@@ -30,7 +31,7 @@ from app.core.enums import (
     Role,
 )
 from app.core.errors import AppError
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.models.appointment import Appointment
 from app.models.appointment_type import AppointmentType
 from app.models.audit import AuditLog
@@ -115,11 +116,13 @@ _EXTRA_PATIENTS = [
     ("Ritesh Kulkarni", "1979-03-09", "male", "Pune", "B+", "Hypertension; routine follow-up."),
     ("Simran Kaur", "1991-06-15", "female", "Ludhiana", "A-", None),
     ("Aarav Bhatia", "2018-11-30", "male", "New Delhi", "O+", "Paediatric wellness visit."),
-    ("Sneha Pillai", "1986-09-22", "female", "Kochi", "AB+", "Thyroid condition; monitored by physician."),
+    ("Sneha Pillai", "1986-09-22", "female", "Kochi", "AB+",
+     "Thyroid condition; monitored by physician."),
     ("Kabir Anand", "1995-01-17", "male", "Jaipur", "B+", None),
     ("Rhea Kapoor", "2000-05-05", "female", "Mumbai", "O+", None),
     ("Manoj Tiwari", "1962-12-01", "male", "Lucknow", "A+", "Age-related joint discomfort."),
-    ("Tara Mukherjee", "1981-02-28", "female", "Kolkata", "B-", "Iron deficiency under routine monitoring."),
+    ("Tara Mukherjee", "1981-02-28", "female", "Kolkata", "B-",
+     "Iron deficiency under routine monitoring."),
     ("Yash Agarwal", "1993-07-11", "male", "Jaipur", "AB+", None),
     ("Zoya Farooqui", "1987-10-04", "female", "Hyderabad", "O+", "Known dust allergy."),
     ("Varun Nambiar", "1973-04-19", "male", "Kochi", "B+", "Dyslipidaemia; routine review."),
@@ -160,11 +163,44 @@ _EXTRA_PATIENTS = [
     ("Manav Suri", "1987-03-22", "male", "New Delhi", "AB+", "Routine outpatient review."),
 ]
 
+_FIRST_NAMES = {
+    "male": ["Rohit", "Amit", "Suresh", "Vikas", "Manoj", "Anil", "Sanjay", "Deepak", "Rahul",
+             "Naveen", "Arvind", "Pradeep"],
+    "female": ["Sunita", "Meena", "Kavita", "Anjali", "Rekha", "Neha", "Seema", "Pooja", "Radha",
+               "Lata", "Usha", "Geeta"],
+}
+_DEMO_YEAR = 2026  # fixed, so the generated family doesn't change on someone's birthday
+
+
+def _family_contact(index: int, name: str, dob: date, sex: str) -> str:
+    """A believable emergency contact: same surname, a relation that fits the patient's age.
+
+    Deterministic (driven by the patient's index) so re-seeding never changes it.
+    Format matches the app's own: "Name (relation) · phone".
+    """
+    other = "female" if sex == "male" else "male"
+    age = _DEMO_YEAR - dob.year
+    if age < 18:
+        relation, gender = ("father", "male") if index % 2 else ("mother", "female")
+    elif age >= 60:
+        relation, gender = (("son", "male") if index % 2 else ("daughter", "female"))
+        if index % 3 == 0:
+            relation, gender = "spouse", other
+    else:
+        relation, gender = [("spouse", other),
+                            ("brother" if sex == "male" else "sister", sex),
+                            (("father", "male") if index % 2 else ("mother", "female"))][index % 3]
+    pool = _FIRST_NAMES[gender]
+    first = pool[(index * 5) % len(pool)]
+    surname = name.split()[-1]
+    return f"{first} {surname} ({relation}) · +91 90000 {20000 + index:05d}"
+
+
 for _index, (_name, _dob, _sex, _city, _blood, _notes) in enumerate(_EXTRA_PATIENTS, start=11):
     _PATIENTS.append((
         f"CAD-100{_index:03d}", _name, date.fromisoformat(_dob), _sex,
         f"+91 90000 {10000 + _index:05d}", _city, _blood,
-        f"Demo family contact {_index} · +91 90000 {20000 + _index:05d}", _notes,
+        _family_contact(_index, _name, date.fromisoformat(_dob), _sex), _notes,
     ))
 
 _TYPES = [
@@ -198,16 +234,40 @@ def _seed_password() -> str:
 
 
 def _ensure_staff(db: Session, password: str) -> None:
+    """Create / refresh the demo staff.
+
+    Password hashing is deliberately slow, and on a free host the seed runs before the API
+    can answer, so it is kept to a minimum: the password is hashed at most ONCE per run and
+    that hash is shared by every demo account (they all have the same documented demo
+    password anyway). On a restart, one account is checked; if it already matches, nobody's
+    password is touched.
+    """
+    emails = [email for _, email, _ in _STAFF]
+    existing = {u.email: u for u in db.scalars(select(User).where(User.email.in_(emails)))}
+
+    shared_hash: str | None = None
+
+    def demo_hash() -> str:
+        nonlocal shared_hash
+        if shared_hash is None:
+            shared_hash = hash_password(password)
+        return shared_hash
+
+    rotate = False
+    if settings.seed_password and existing:
+        probe = next(iter(existing.values()))
+        rotate = not verify_password(password, probe.password_hash)
+
     for name, email, role in _STAFF:
-        user = db.scalar(select(User).where(User.email == email))
+        user = existing.get(email)
         if user is None:
-            db.add(User(name=name, email=email, role=role, password_hash=hash_password(password)))
+            db.add(User(name=name, email=email, role=role, password_hash=demo_hash()))
         else:
             user.name = name
             user.role = role
             user.is_active = True
-            if settings.seed_password:
-                user.password_hash = hash_password(password)
+            if rotate:
+                user.password_hash = demo_hash()
 
 
 def _ensure_patients(db: Session) -> None:
@@ -280,8 +340,8 @@ def _add_audit_once(
     action: AuditAction,
     actor_id: int | None,
     reason: str,
-    before: dict | None = None,
-    after: dict | None = None,
+    before: dict[str, Any] | None = None,
+    after: dict[str, Any] | None = None,
     created_at: datetime | None = None,
 ) -> None:
     found = db.scalar(select(AuditLog.id).where(
@@ -324,12 +384,17 @@ def _normalise_clinic_start(candidate: datetime, duration_min: int) -> datetime:
     return candidate
 
 
+_LIVE_SLOT_EARLIEST = timedelta(hours=2, minutes=5)  # 11:05 with a 09:00 opening
+
+
 def _live_anchor(now: datetime) -> datetime:
     local = now.astimezone(settings.clinic_tz)
     rounded = local.replace(minute=(local.minute // 15) * 15, second=0, microsecond=0)
     candidate = rounded - timedelta(minutes=15)
     opening = datetime.combine(local.date(), time(9, 0), tzinfo=settings.clinic_tz)
-    candidate = max(candidate, opening + timedelta(hours=2, minutes=30))
+    # The earliest the live slot may start: the moment the last morning history slot
+    # (10:50 follow-up, 15 min) ends, so there is neither an overlap nor an empty patch.
+    candidate = max(candidate, opening + _LIVE_SLOT_EARLIEST)
     if time(13, 0) <= candidate.time() < time(14, 0):
         candidate = datetime.combine(local.date(), time(14, 0), tzinfo=settings.clinic_tz)
     closing_anchor = datetime.combine(local.date(), time(20, 30), tzinfo=settings.clinic_tz)
@@ -337,7 +402,9 @@ def _live_anchor(now: datetime) -> datetime:
     return _normalise_clinic_start(candidate, 30)
 
 
-def _type_for_specialty(types: dict[str, AppointmentType], specialty: str, index: int) -> AppointmentType:
+def _type_for_specialty(
+    types: dict[str, AppointmentType], specialty: str, index: int
+) -> AppointmentType:
     if index % 3 == 1:
         return types["Follow-up visit"]
     if specialty == "cardiology":
@@ -351,7 +418,9 @@ def _type_for_specialty(types: dict[str, AppointmentType], specialty: str, index
     return types["Extended consultation"] if index % 3 == 2 else types["General OPD consultation"]
 
 
-def _patient_has_appointment_today(db: Session, patient_id: int, lo: datetime, hi: datetime) -> bool:
+def _patient_has_appointment_today(
+    db: Session, patient_id: int, lo: datetime, hi: datetime
+) -> bool:
     return db.scalar(select(Appointment.id).where(
         Appointment.patient_id == patient_id,
         Appointment.scheduled_start >= lo,
@@ -397,7 +466,9 @@ def _ensure_sample_appointments(db: Session) -> None:
         if doctor is None:
             continue
         case_mrns = [f"CAD-{100001 + doctor_index * 10 + index:06d}" for index in range(10)]
-        doctor_slots: list[tuple[Patient, AppointmentType, datetime, Acuity, AppointmentOrigin]] = []
+        doctor_slots: list[
+            tuple[Patient, AppointmentType, datetime, Acuity, AppointmentOrigin]
+        ] = []
 
         # Four early appointments provide a visible same-day completion/no-show history.
         for index, (clock, type_name, acuity) in enumerate(history_slots):
@@ -434,7 +505,8 @@ def _ensure_sample_appointments(db: Session) -> None:
                     db.flush()
                     _add_audit_once(
                         db, entity_type="appointment", entity_id=appt.id,
-                        action=AuditAction.CREATE, actor_id=doctors.get("receptionist@cadence.dev", doctor).id,
+                        action=AuditAction.CREATE,
+                        actor_id=doctors.get("receptionist@cadence.dev", doctor).id,
                         reason="Demo seed: appointment registered",
                         after={"patient_id": patient.id, "doctor_id": doctor.id,
                                "status": status.value, "scheduled_start": start.isoformat()},
@@ -625,14 +697,23 @@ def _ensure_triage_scenarios(db: Session) -> None:
         patient = patients.get(mrn)
         if patient is None:
             continue
-        exists = db.scalar(select(TriageAssessment.id).where(
+        existing = db.scalar(select(TriageAssessment).where(
             TriageAssessment.patient_id == patient.id,
             TriageAssessment.chief_complaint == complaint,
         ))
-        if exists is not None:
-            continue
         assessed_at = now - timedelta(minutes=8 + index * 4)
         consumed_at = now if mrn in {"CAD-100049", "CAD-100061"} else None
+        if existing is not None:
+            # The demo's clock moves forward every day. An assessment left over from an
+            # earlier day is outside the planner's recency window, so re-date it (a
+            # same-day restart leaves it alone, keeping anything a clinician already did).
+            assessed_before = existing.assessed_at
+            if assessed_before.tzinfo is None:  # SQLite hands back naive datetimes
+                assessed_before = assessed_before.replace(tzinfo=UTC)
+            if assessed_before < now - _DEMO_TRIAGE_REDATE_AFTER:
+                existing.assessed_at = assessed_at
+                existing.consumed_at = consumed_at
+            continue
         assessment = TriageAssessment(
             patient_id=patient.id,
             nurse_id=nurse.id,
@@ -652,6 +733,10 @@ def _ensure_triage_scenarios(db: Session) -> None:
                    "chief_complaint": complaint},
             created_at=assessed_at,
         )
+
+
+# A demo triage older than this belongs to an earlier day and is re-dated on the next seed.
+_DEMO_TRIAGE_REDATE_AFTER = timedelta(hours=6)
 
 
 def _decision_key(kind: str, day: date) -> str:
@@ -709,8 +794,14 @@ def _ensure_decision_scenarios(db: Session) -> None:
     auto = db.scalar(select(SchedulingDecision).where(
         SchedulingDecision.idempotency_key == auto_key
     ))
-    if auto is None and all((nurse, cardiologist, emergency_patient, displaced_patient,
-                            cardiology_type)):
+    if (
+        auto is None
+        and nurse is not None
+        and cardiologist is not None
+        and emergency_patient is not None
+        and displaced_patient is not None
+        and cardiology_type is not None
+    ):
         # Find a real 60-minute gap in the cardiologist's evening shift. The
         # inserted emergency occupies the first half; the displaced routine
         # booking is moved into the adjacent second half.
@@ -730,7 +821,7 @@ def _ensure_decision_scenarios(db: Session) -> None:
             Appointment.scheduled_start < _ist_at(local_day + timedelta(days=1), time.min),
             Appointment.scheduled_end > _ist_at(local_day, time.min),
         )))
-        emergency_start = None
+        emergency_start: datetime | None = None
         candidate = first_candidate
         while candidate <= last_candidate:
             candidate_utc = candidate.astimezone(UTC)
@@ -753,7 +844,9 @@ def _ensure_decision_scenarios(db: Session) -> None:
             Appointment.scheduled_start >= _ist_at(local_day, time.min),
             Appointment.scheduled_start < _ist_at(local_day + timedelta(days=1), time.min),
         ))
-        if emergency_start is not None and emergency is None and moved is None:
+        if (emergency_start is not None and moved_start is not None
+                and emergency is None and moved is None):
+            emergency_end = emergency_start + timedelta(minutes=30)
             try:
                 with db.begin_nested():
                     emergency = Appointment(
@@ -774,7 +867,9 @@ def _ensure_decision_scenarios(db: Session) -> None:
                         type_id=cardiology_type.id,
                         scheduled_start=moved_start,
                         scheduled_end=moved_start + timedelta(minutes=30),
-                        status=_appointment_status(moved_start, moved_start + timedelta(minutes=30), now),
+                        status=_appointment_status(
+                            moved_start, moved_start + timedelta(minutes=30), now
+                        ),
                         origin=AppointmentOrigin.BOOKED,
                         acuity=Acuity.A5,
                         displacement_count=1,
@@ -797,14 +892,14 @@ def _ensure_decision_scenarios(db: Session) -> None:
                                         "demo_record": True},
                         chosen_plan={"placement": {"doctor_id": cardiologist.id,
                                                     "start": emergency_start.isoformat(),
-                                                    "end": (emergency_start + timedelta(minutes=30)).isoformat()},
+                                                    "end": emergency_end.isoformat()},
                                        "moves": [{"appointment_id": moved.id,
                                                   "from_start": emergency_start.isoformat(),
                                                   "to_start": moved_start.isoformat(),
                                                   "delay_min": 30}]},
                         alternatives=[{"placement": {"doctor_id": cardiologist.id,
                                                        "start": emergency_start.isoformat(),
-                                                       "end": (emergency_start + timedelta(minutes=30)).isoformat()},
+                                                       "end": emergency_end.isoformat()},
                                        "moves": [{"appointment_id": moved.id,
                                                   "from_start": emergency_start.isoformat(),
                                                   "to_start": moved_start.isoformat()}]}],
@@ -838,6 +933,16 @@ def _ensure_decision_scenarios(db: Session) -> None:
     # It is recorded by the real planner + commit (never hand-written), so its options are
     # genuine plans a clinician can review and apply.
     escalation_key = _decision_key("escalation", local_day)
+    # The inbox lists every unresolved escalation across all days, so an unresolved demo one
+    # from an earlier day would pile up (its plans refer to yesterday's schedule). Clear them.
+    for stale in db.scalars(select(SchedulingDecision).where(
+        SchedulingDecision.status == "escalated",
+        SchedulingDecision.resolved_at.is_(None),
+        SchedulingDecision.idempotency_key.like("cadence-demo-escalation-%"),
+        SchedulingDecision.idempotency_key != escalation_key,
+    )):
+        db.delete(stale)
+    db.flush()
     pending = db.scalar(select(SchedulingDecision).where(
         SchedulingDecision.idempotency_key == escalation_key
     ))
@@ -870,7 +975,8 @@ def _ensure_decision_scenarios(db: Session) -> None:
         SchedulingDecision.idempotency_key == resolved_key
     ))
     resolved_patient = patients.get("CAD-100064")
-    if resolved is None and nurse is not None and admin is not None and resolved_patient is not None:
+    if (resolved is None and nurse is not None and admin is not None
+            and resolved_patient is not None):
         resolved = SchedulingDecision(
             trigger="emergency_insert",
             status="escalated",
@@ -899,9 +1005,9 @@ def _ensure_decision_scenarios(db: Session) -> None:
             db, entity_type="scheduling_decision", entity_id=resolved.id,
             action=AuditAction.RESOLVE, actor_id=admin.id,
             reason="Demo seed: historical escalation resolved by administrator",
-            after={"resolved_at": resolved.resolved_at.isoformat(),
+            after={"resolved_at": (resolved.resolved_at or now).isoformat(),
                    "resolution_note": resolved.resolution_note},
-            created_at=resolved.resolved_at,
+            created_at=resolved.resolved_at or now,
         )
 
 
@@ -939,7 +1045,8 @@ def seed(*, quiet: bool = False) -> None:
         db.commit()
         if quiet:
             return
-        print("Synthetic Cadence demo data refreshed (patients, staff, schedule, triage and audit).")
+        print("Synthetic Cadence demo data refreshed "
+              "(patients, staff, schedule, triage and audit).")
         if settings.is_production or settings.seed_password:
             print("Seeded staff passwords are taken from CADENCE_SEED_PASSWORD.")
         else:

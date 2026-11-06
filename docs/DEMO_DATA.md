@@ -13,8 +13,8 @@ The PostgreSQL seed (`backend/app/seed.py`) creates or refreshes:
   mobile numbers, cities, blood groups, emergency contacts and short notes.
 - **11 staff accounts**, including two receptionists, two triage nurses, six doctors and the
   administrator account `admin@cadence.dev` (display name: Saurabh Raj Shekhar).
-- **Six specialties**: general medicine, cardiology, paediatrics, orthopaedics and dermatology
-  (two general-medicine doctors).
+- **Five specialties across six doctors**: general medicine (two doctors), cardiology,
+  paediatrics, orthopaedics and dermatology.
 - **14 days of doctor shifts**, split into 09:00–13:00 and 14:00–22:00 clinic sessions in
   `CADENCE_CLINIC_TIMEZONE` (Asia/Kolkata by default).
 - **A populated schedule**: around 120 appointments on a fresh database, with completed visits,
@@ -81,3 +81,25 @@ uv run python -m app.seed
 
 The local-only default password is `cadence123`. Production deployments must use
 `CADENCE_SEED_PASSWORD` instead.
+
+## How the seed behaves over time
+
+The seed runs on every start when `CADENCE_SEED_DEMO_ON_START=true`, and the demo is meant to
+look "live" on any day. These rules keep that true; please keep them if you edit the seed:
+
+- **The clock moves, the data follows.** Appointments are re-anchored to the current clinic
+  time; demo triage assessments from an earlier day are re-dated (a same-day restart leaves
+  them alone, so anything a clinician did that day survives).
+- **The pending A1 escalation is created by the real planner** (`plan_emergency` +
+  `commit_emergency`), never hand-written, so *Review options* shows genuine, applicable plans.
+  Unresolved demo escalations from earlier days (or any with malformed options) are removed so
+  the inbox never piles up. Resolved ones are kept as history.
+- **Someone is always in consultation while the clinic is open** (09:00–13:00 and 14:00–22:00
+  IST; 13:00–14:00 is the lunch closure). Before opening and late in the evening the day's
+  patients are simply waiting or completed.
+- **Passwords are hashed at most once per run**, and not at all on a restart if the demo
+  password is unchanged (hashing is deliberately slow and would dominate a free host's cold
+  start). Changing `CADENCE_SEED_PASSWORD` rotates every demo account on the next start.
+- **MongoDB profiles are filled only where missing**, so edits made in the app survive restarts.
+  The one exception is filler written by older seeds ("Demo family contact…", "Demo residence…",
+  occupation "Not recorded"), which is replaced with realistic values.

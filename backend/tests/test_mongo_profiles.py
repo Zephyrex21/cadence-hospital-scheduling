@@ -489,5 +489,162 @@ def test_demo_profiles_seed_rich_data_without_overwriting_edits(db_session: Sess
     assert again is not None and again["notes"] == "edited"
 
     staff = database["staff_profiles"].count_documents({"doctor": {"$exists": True}})
-    assert staff == 3
+    assert staff == 6  # every doctor in the demo roster
     assert backfill_profiles(db_session, database) == {"patients": 0, "staff": 0}
+
+
+# --- validator application on restricted clusters (Atlas free tier refuses collMod) ----
+
+
+class _FakeDb:
+    """Just enough of a PyMongo Database to observe how validators are applied."""
+
+    def __init__(self, existing: dict[str, dict[str, Any]] | None = None,
+                 collmod_error: Exception | None = None) -> None:
+        self.existing = existing or {}
+        self.created: list[str] = []
+        self.commands: list[str] = []
+        self.collmod_error = collmod_error
+
+    def list_collections(self, filter: dict[str, Any] | None = None) -> Any:  # noqa: A002
+        name = (filter or {}).get("name")
+        return iter([{"name": n, "options": o} for n, o in self.existing.items()
+                     if name is None or n == name])
+
+    def create_collection(self, name: str, **kwargs: Any) -> None:
+        self.created.append(name)
+        self.existing[name] = {"validator": kwargs["validator"]}
+
+    def command(self, *args: Any, **kwargs: Any) -> None:
+        self.commands.append(str(args[0]))
+        if self.collmod_error:
+            raise self.collmod_error
+
+
+def test_validators_are_created_when_collections_are_missing() -> None:
+    from app.mongo.schema import apply_validators
+
+    fake = _FakeDb()
+    apply_validators(fake)
+    assert sorted(fake.created) == ["patients", "staff_profiles"]
+    assert fake.commands == []
+
+
+def test_unchanged_validators_are_not_reapplied() -> None:
+    """The restart path: nothing to change, so collMod (refused by Atlas M0) is never sent."""
+    from app.mongo.schema import _PATIENT_VALIDATOR, _STAFF_VALIDATOR, apply_validators
+
+    fake = _FakeDb({"patients": {"validator": _PATIENT_VALIDATOR},
+                    "staff_profiles": {"validator": _STAFF_VALIDATOR}},
+                   collmod_error=RuntimeError("must not be called"))
+    apply_validators(fake)
+    assert fake.created == [] and fake.commands == []
+
+
+def test_a_changed_validator_is_updated_with_collmod() -> None:
+    from app.mongo.schema import _STAFF_VALIDATOR, apply_validators
+
+    fake = _FakeDb({"patients": {"validator": {"$jsonSchema": {"bsonType": "object"}}},
+                    "staff_profiles": {"validator": _STAFF_VALIDATOR}})
+    apply_validators(fake)
+    assert fake.commands == ["collMod"]  # only the one that differs
+
+
+def test_collmod_being_refused_is_not_fatal() -> None:
+    from pymongo.errors import OperationFailure
+
+    from app.mongo.schema import apply_validators
+
+    refuse = OperationFailure("user is not allowed to do action [collMod]", code=8000)
+    fake = _FakeDb({"patients": {"validator": {"$jsonSchema": {}}},
+                    "staff_profiles": {"validator": {"$jsonSchema": {}}}}, collmod_error=refuse)
+    apply_validators(fake)  # logs a warning, must not raise
+    assert fake.commands == ["collMod", "collMod"]  # it tried both, neither aborted the other
+
+
+def test_indexes_are_still_built_when_validators_cannot_be_applied(
+    mdb: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pymongo.errors import OperationFailure
+
+    from app.mongo import schema
+
+    def refuse(*_: Any, **__: Any) -> None:
+        raise OperationFailure("user is not allowed to do action [collMod]", code=8000)
+
+    monkeypatch.setattr(schema, "_apply_validator", refuse)
+    schema.ensure_mongo_schema(mdb)  # must not raise
+    mdb["patients"].insert_one({"patient_id": 1, "mrn": "CAD-1", "schema_version": 1})
+    with pytest.raises(DuplicateKeyError):  # the unique index exists
+        mdb["patients"].insert_one({"patient_id": 1, "mrn": "CAD-9", "schema_version": 1})
+
+
+# --- demo data realism -----------------------------------------------------------------
+
+
+def _seeded_database(db_session: Session) -> Any:
+    from app.seed import _ensure_patients, _ensure_staff
+    from app.seed_profiles import seed_profiles
+
+    _ensure_staff(db_session, "pw-for-tests")
+    _ensure_patients(db_session)
+    db_session.commit()
+    database = mongomock.MongoClient().realism_test
+    seed_profiles(db_session, database)
+    return database
+
+
+def test_generated_demo_profiles_contain_no_obvious_filler(db_session: Session) -> None:
+    from sqlalchemy import select
+
+    database = _seeded_database(db_session)
+    extras = list(db_session.scalars(select(Patient).where(Patient.mrn >= "CAD-100011")))
+    assert len(extras) >= 50
+    for patient in extras:
+        doc = database["patients"].find_one({"patient_id": patient.id})
+        assert doc is not None
+        contact = doc["emergency_contacts"][0]
+        assert "demo" not in contact["name"].lower() and contact.get("relation")
+        assert contact["name"].split()[-1] == patient.name.split()[-1], "family shares a surname"
+        assert "demo" not in doc["address"]["line1"].lower()
+        occupation = doc["demographics"]["occupation"]
+        assert occupation and occupation.lower() != "not recorded"
+        assert "demo" not in (patient.emergency_contact or "").lower()
+    # children list a parent; nobody gets a nonsensical occupation
+    child = db_session.scalar(select(Patient).where(Patient.name == "Aarav Bhatia"))
+    assert child is not None
+    child_doc = database["patients"].find_one({"patient_id": child.id})
+    assert child_doc["demographics"]["occupation"] == "Student"
+    assert child_doc["emergency_contacts"][0]["relation"] in {"mother", "father"}
+
+
+def test_placeholders_from_an_older_seed_are_replaced_but_real_edits_are_kept(
+    db_session: Session,
+) -> None:
+    from sqlalchemy import select
+
+    from app.seed_profiles import seed_profiles
+
+    database = _seeded_database(db_session)
+    a, b = db_session.scalars(select(Patient).where(Patient.mrn >= "CAD-100011")).all()[:2]
+    # what an already-deployed database contains from the previous seed
+    database["patients"].update_one({"patient_id": a.id}, {"$set": {
+        "emergency_contacts": [{"name": "Demo family contact 11", "is_primary": True}],
+        "address": {"line1": "Demo residence, Dwarka", "city": "New Delhi", "country": "IN"},
+        "demographics": {"preferred_language": "hi", "occupation": "Not recorded"},
+    }})
+    # a clinician's genuine edit on another patient
+    database["patients"].update_one({"patient_id": b.id}, {"$set": {
+        "address": {"line1": "7 Hauz Khas Village", "city": "New Delhi", "country": "IN"},
+        "demographics": {"occupation": "Journalist"},
+    }})
+
+    seed_profiles(db_session, database)
+
+    fixed = database["patients"].find_one({"patient_id": a.id})
+    assert "demo" not in fixed["emergency_contacts"][0]["name"].lower()
+    assert "demo" not in fixed["address"]["line1"].lower()
+    assert fixed["demographics"]["occupation"] != "Not recorded"
+    kept = database["patients"].find_one({"patient_id": b.id})
+    assert kept["address"]["line1"] == "7 Hauz Khas Village"
+    assert kept["demographics"]["occupation"] == "Journalist"
