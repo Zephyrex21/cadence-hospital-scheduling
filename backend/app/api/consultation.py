@@ -25,7 +25,8 @@ from app.services.consultation import change_consultation_status, list_queue
 
 router = APIRouter(tags=["consultation"])
 
-STATUS_ROLES = (Role.DOCTOR, Role.ADMINISTRATOR)
+# Every staff role may call it; the service decides which *action* each role may perform.
+STATUS_ROLES = (Role.DOCTOR, Role.ADMINISTRATOR, Role.RECEPTIONIST, Role.TRIAGE_NURSE)
 
 
 @router.get("/queue", response_model=list[QueueEntryOut])

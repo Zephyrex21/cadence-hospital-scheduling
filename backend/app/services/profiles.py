@@ -133,15 +133,27 @@ def sections_from_legacy(patient: Patient) -> dict[str, Any]:
     return sections
 
 
-def _mirror_legacy_columns(patient: Patient, doc: dict[str, Any]) -> None:
-    contact = doc.get("contact") or {}
-    patient.contact = (contact.get("phone") or contact.get("email") or None)
-    patient.city = (doc.get("address") or {}).get("city") or None
-    patient.blood_group = (doc.get("medical") or {}).get("blood_group") or None
-    contacts = doc.get("emergency_contacts") or []
-    primary = next((c for c in contacts if c.get("is_primary")), contacts[0] if contacts else None)
-    patient.emergency_contact = format_emergency_contact(primary) if primary else None
-    patient.notes = (doc.get("notes") or "")[:500] or None
+def _mirror_legacy_columns(patient: Patient, doc: dict[str, Any], touched: set[str]) -> None:
+    """Copy *only the sections that were just written* into the legacy columns.
+
+    Mirroring everything from a document that lacks a section would blank the patient's
+    existing phone / city / emergency contact / notes (data loss).
+    """
+    if "contact" in touched:
+        contact = doc.get("contact") or {}
+        patient.contact = contact.get("phone") or contact.get("email") or None
+    if "address" in touched:
+        patient.city = (doc.get("address") or {}).get("city") or None
+    if "medical" in touched:
+        patient.blood_group = (doc.get("medical") or {}).get("blood_group") or None
+    if "emergency_contacts" in touched:
+        contacts = doc.get("emergency_contacts") or []
+        primary = next(
+            (c for c in contacts if c.get("is_primary")), contacts[0] if contacts else None
+        )
+        patient.emergency_contact = format_emergency_contact(primary) if primary else None
+    if "notes" in touched:
+        patient.notes = (doc.get("notes") or "")[:500] or None
 
 
 # --- patients ------------------------------------------------------------------------
@@ -173,11 +185,18 @@ def update_patient_profile(
         raise ForbiddenError(f"Your role cannot edit: {', '.join(sorted(denied))}")
 
     with _store_errors():
+        if repo.get_patient_doc(store, patient.id) is None:
+            # No profile yet (Mongo was down at registration, or enabled later): start from
+            # what the patient record already holds, so nothing existing is lost.
+            repo.upsert_patient_doc(
+                store, patient_id=patient.id, mrn=patient.mrn,
+                sections=sections_from_legacy(patient), actor_id=actor.id,
+            )
         doc = repo.upsert_patient_doc(
             store, patient_id=patient.id, mrn=patient.mrn, sections=sections, actor_id=actor.id
         )
 
-    _mirror_legacy_columns(patient, doc)
+    _mirror_legacy_columns(patient, doc, set(sections))
     record_audit(
         db,
         entity_type="patient_profile",

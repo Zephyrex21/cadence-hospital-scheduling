@@ -264,8 +264,10 @@ export interface DashboardSummary {
 
 export interface EscalationOption extends EmergencyPlan {
   index: number
-  /** False when the option violates a hard safety constraint (informational only). */
+  /** False when the option violates a hard safety constraint, or has expired. */
   applicable: boolean
+  /** Proposed too long ago to apply any more — re-plan to refresh it. */
+  expired: boolean
 }
 
 export interface EscalationOptions {

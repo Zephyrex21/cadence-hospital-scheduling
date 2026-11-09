@@ -94,3 +94,16 @@ export function useApplyEscalation() {
     },
   })
 }
+
+/** Refresh a stale escalation's options against the schedule as it is now. */
+export function useReplanEscalation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: number) =>
+      apiFetch<EscalationOptions>(`/escalations/${id}/replan`, { method: 'POST' }),
+    onSuccess: (data, id) => {
+      qc.setQueryData(['escalation-options', id], data)
+      void qc.invalidateQueries({ queryKey: ['dashboard'] })
+    },
+  })
+}

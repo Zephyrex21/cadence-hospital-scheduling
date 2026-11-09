@@ -16,12 +16,26 @@ export const ACTION_LABEL: Record<ConsultationAction, string> = {
   no_show: 'No show',
 }
 
-/** Valid consultation actions for a status — only when the user may manage it. */
+/** What the current user may do to a queue entry. Arrival / no-show are front-desk work;
+ *  starting and completing a consultation are clinical (the server enforces the same). */
+export interface QueueAccess {
+  frontDesk: boolean
+  clinical: boolean
+}
+
+const FRONT_DESK_ACTIONS: ConsultationAction[] = ['check_in', 'no_show']
+
+/** Valid consultation actions for a status, filtered by what the user may do. */
 export function availableActions(
   status: AppointmentStatus,
-  canManage: boolean,
+  access: QueueAccess,
 ): ConsultationAction[] {
-  if (!canManage) return []
+  return validActions(status).filter((action) =>
+    FRONT_DESK_ACTIONS.includes(action) ? access.frontDesk : access.clinical,
+  )
+}
+
+function validActions(status: AppointmentStatus): ConsultationAction[] {
   switch (status) {
     case 'booked':
       return ['check_in', 'start', 'no_show']

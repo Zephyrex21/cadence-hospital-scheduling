@@ -8,7 +8,12 @@ import { EmptyState, ErrorState } from '../components/states'
 import { useAuth } from '../features/auth/AuthContext'
 import { AcuityChip } from '../features/emergency/AcuityChip'
 import { useChangeStatus, useQueue } from '../features/queue/api'
-import { ACTION_LABEL, availableActions, formatWait } from '../features/queue/format'
+import {
+  ACTION_LABEL,
+  availableActions,
+  formatWait,
+  type QueueAccess,
+} from '../features/queue/format'
 import { formatTime, statusLabel, statusTone } from '../features/schedule/timeline'
 import type { QueueEntry } from '../types'
 
@@ -17,10 +22,16 @@ export function QueuePage() {
   const queue = useQueue()
   const change = useChangeStatus()
 
-  const canManage = (entry: QueueEntry): boolean => {
-    if (!user) return false
-    if (user.role === 'administrator') return true
-    return user.role === 'doctor' && String(user.id) === String(entry.doctor.id)
+  // Arrival / no-show are front-desk work (reception, nurses); starting and completing a
+  // consultation are clinical (the owning doctor, or an administrator).
+  const accessFor = (entry: QueueEntry): QueueAccess => {
+    if (!user) return { frontDesk: false, clinical: false }
+    if (user.role === 'administrator') return { frontDesk: true, clinical: true }
+    if (user.role === 'receptionist' || user.role === 'triage_nurse') {
+      return { frontDesk: true, clinical: false }
+    }
+    const own = user.role === 'doctor' && String(user.id) === String(entry.doctor.id)
+    return { frontDesk: own, clinical: own }
   }
 
   const entries = queue.data ?? []
@@ -61,7 +72,7 @@ export function QueuePage() {
           <ul className="flex flex-col divide-y divide-hairline/60">
             <AnimatePresence initial={false}>
               {entries.map((entry) => {
-                const actions = availableActions(entry.status, canManage(entry))
+                const actions = availableActions(entry.status, accessFor(entry))
                 const inProgress = entry.status === 'in_progress'
                 return (
                   <m.li

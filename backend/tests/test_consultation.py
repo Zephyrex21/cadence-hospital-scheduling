@@ -118,15 +118,17 @@ def test_other_doctor_cannot_change_appointment(
     assert resp.status_code == 403
 
 
-def test_receptionist_cannot_change_status(
+def test_receptionist_can_check_in_but_not_run_the_consultation(
     client: TestClient,
     setup: dict[str, int],
     user_factory: Callable[..., User],
     auth_headers: Callable[[User], dict[str, str]],
 ) -> None:
-    recep = user_factory(Role.RECEPTIONIST)
-    resp = _status(client, auth_headers(recep), setup["appt_id"], "check_in")
-    assert resp.status_code == 403
+    """Arrival is front-desk work; starting/completing a consultation is clinical."""
+    recep = auth_headers(user_factory(Role.RECEPTIONIST))
+    assert _status(client, recep, setup["appt_id"], "start").status_code == 403
+    assert _status(client, recep, setup["appt_id"], "check_in").status_code == 200
+    assert _status(client, recep, setup["appt_id"], "complete").status_code == 403
 
 
 # --- queue -------------------------------------------------------------------

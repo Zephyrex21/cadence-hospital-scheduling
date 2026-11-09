@@ -512,10 +512,18 @@ def _options(record: SchedulingDecision) -> list[dict[str, Any]]:
     return [o for o in options if is_plan(o)]
 
 
+def _expired(option: dict[str, Any], now: datetime) -> bool:
+    """An option whose start time is far in the past can no longer be applied (the schedule
+    has moved on). Showing it as applicable only leads to a failed apply."""
+    start = ensure_aware_utc(datetime.fromisoformat(option["placement"]["start"]))
+    return now - start > PLAN_MAX_AGE
+
+
 def escalation_options(db: Session, decision_id: int) -> dict[str, Any]:
     """The options a clinician can choose between for an unresolved escalation."""
     record = _escalation_record(db, decision_id, lock=False)
     options = _options(record)
+    now = utcnow()
     appt_ids = {m["appointment_id"] for o in options for m in o["moves"]}
     doctor_ids = list({o["placement"]["doctor_id"] for o in options})
     doctor_rows = (
@@ -531,11 +539,70 @@ def escalation_options(db: Session, decision_id: int) -> dict[str, Any]:
             "mrn": patient.mrn if patient else "",
         },
         "options": [
-            {"index": i, "applicable": bool(o["feasible"]), **o} for i, o in enumerate(options)
+            {
+                "index": i,
+                "expired": _expired(o, now),
+                "applicable": bool(o["feasible"]) and not _expired(o, now),
+                **o,
+            }
+            for i, o in enumerate(options)
         ],
         "appointment_details": _appointment_details(db, appt_ids),
         "doctor_names": {str(u.id): u.name for u in doctor_rows},
     }
+
+
+def replan_escalation(db: Session, *, decision_id: int, actor_id: int) -> dict[str, Any]:
+    """Recompute an unresolved escalation's options against the schedule *as it is now*.
+
+    Options go stale (they are anchored to the time they were proposed); this refreshes them
+    in place so a clinician never has to start the emergency over. The patient's triage must
+    still be current, exactly as when applying.
+    """
+    record = _escalation_record(db, decision_id, lock=True)
+    req = (record.input_snapshot or {}).get("request")
+    if not req:
+        raise ValidationError(
+            "This legacy escalation cannot be re-planned; resolve it with a note.",
+            details={"code": "option_not_applicable"},
+        )
+    type_id = int(req["type_id"])
+    acuity = Acuity(req["acuity"])
+    _, appt_type = _resolve(db, record.patient_id, type_id)
+    at = utcnow()
+    _require_matching_triage(db, record.patient_id, acuity, at)
+    doctor_ids = eligible_doctor_ids(db, appt_type.specialty, at)
+    appts = active_appointments(db, doctor_ids, at)
+    state = build_engine_state(db, doctor_ids, at, appts, emergency_patient_id=record.patient_id)
+    decision = insert_emergency(
+        state,
+        EngineRequest(
+            patient_id=record.patient_id,
+            acuity=acuity,
+            duration_min=appt_type.default_duration_min,
+            eligible_doctor_ids=tuple(doctor_ids),
+            now=at,
+        ),
+    )
+    decision_dict = serialize_decision(decision)
+    record.chosen_plan = decision_dict["chosen"]
+    record.alternatives = decision_dict["alternatives"]
+    record.parameters = decision_dict["parameters"]
+    record.reasons = list(decision.reasons)
+    record.input_snapshot = _snapshot(
+        state_fingerprint(appts), appts, type_id=type_id, acuity=acuity
+    )
+    record_audit(
+        db,
+        entity_type="scheduling_decision",
+        entity_id=record.id,
+        action=AuditAction.UPDATE,
+        actor_id=actor_id,
+        reason="Escalation options re-planned against the current schedule",
+        after={"options": len(_options(record))},
+    )
+    db.commit()
+    return escalation_options(db, decision_id)
 
 
 def apply_escalated_option(

@@ -84,6 +84,7 @@ def list_doctors(db: Session) -> list[dict[str, Any]]:
     rows = db.execute(
         select(User, DoctorProfile)
         .join(DoctorProfile, DoctorProfile.user_id == User.id)
+        .where(User.is_active.is_(True))
         .order_by(User.name)
     ).all()
     return [
@@ -112,6 +113,12 @@ def available_slots(db: Session, doctor_id: int, type_id: int, day: datetime) ->
     appt_type = db.get(AppointmentType, type_id)
     if appt_type is None:
         raise NotFoundError("Appointment type not found")
+    doctor = db.get(User, doctor_id)
+    profile = db.get(DoctorProfile, doctor_id)
+    if doctor is None or profile is None or not doctor.is_active:
+        return []
+    if profile.specialty != appt_type.specialty:
+        return []
     lo, hi = clinic_day_bounds(day)
     shifts = _shift_intervals(db, doctor_id, lo, hi)
     # Shifts can straddle the day boundary; look at busy time across their full extent.
@@ -138,6 +145,19 @@ def list_schedule(db: Session, day: datetime, doctor_id: int | None = None) -> l
     return list(db.scalars(stmt.order_by(Appointment.doctor_id, Appointment.scheduled_start)))
 
 
+def _require_bookable(doctor: User, profile: DoctorProfile, appt_type: AppointmentType) -> None:
+    """A deactivated doctor can't be booked, and an appointment type belongs to a specialty."""
+    if not doctor.is_active:
+        raise ValidationError(
+            f"{doctor.name} is not currently available", details={"code": "doctor_inactive"}
+        )
+    if profile.specialty != appt_type.specialty:
+        raise ValidationError(
+            f"{doctor.name} ({profile.specialty}) cannot take a {appt_type.name} appointment",
+            details={"code": "specialty_mismatch"},
+        )
+
+
 def book_appointment(db: Session, data: AppointmentCreate, *, actor_id: int) -> Appointment:
     patient = db.get(Patient, data.patient_id)
     if patient is None:
@@ -146,8 +166,10 @@ def book_appointment(db: Session, data: AppointmentCreate, *, actor_id: int) -> 
     if appt_type is None:
         raise NotFoundError("Appointment type not found")
     doctor = db.get(User, data.doctor_id)
-    if doctor is None or db.get(DoctorProfile, data.doctor_id) is None:
+    profile = db.get(DoctorProfile, data.doctor_id)
+    if doctor is None or profile is None:
         raise NotFoundError("Doctor not found")
+    _require_bookable(doctor, profile, appt_type)
 
     start = ensure_aware_utc(data.scheduled_start)
     end = start + timedelta(minutes=appt_type.default_duration_min)

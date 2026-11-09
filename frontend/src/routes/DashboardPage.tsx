@@ -20,7 +20,11 @@ import { useToast } from '../components/Toast'
 import { useAuth } from '../features/auth/AuthContext'
 import { canRecordTriage, ROLE_LABELS } from '../features/auth/roles'
 import { formatRunningDelay, useDashboard } from '../features/dashboard/api'
-import { useApplyEscalation, useEscalationOptions } from '../features/emergency/api'
+import {
+  useApplyEscalation,
+  useEscalationOptions,
+  useReplanEscalation,
+} from '../features/emergency/api'
 import {
   ACUITY_LABEL,
   ACUITY_ORDER,
@@ -254,6 +258,7 @@ function DashboardBody({ data }: { data: DashboardSummary }) {
 function OptionsDialog({ item, onClose }: { item: EscalationItem; onClose: () => void }) {
   const options = useEscalationOptions(item.decision_id)
   const apply = useApplyEscalation()
+  const replan = useReplanEscalation()
   const { toast } = useToast()
   const [note, setNote] = useState('')
 
@@ -289,7 +294,16 @@ function OptionsDialog({ item, onClose }: { item: EscalationItem; onClose: () =>
       : options.error
         ? 'Could not load the options.'
         : null
+  const replanError =
+    replan.error instanceof ApiError
+      ? replan.error.message
+      : replan.error
+        ? 'Could not re-plan.'
+        : null
   const data = options.data
+  const anyExpired = !!data?.options.some((o) => o.expired)
+  const nothingApplicable = !!data && data.options.length > 0 && !data.options.some((o) => o.applicable)
+  const canReplan = !!data && (anyExpired || nothingApplicable || data.options.length === 0)
 
   return (
     <Modal
@@ -310,8 +324,35 @@ function OptionsDialog({ item, onClose }: { item: EscalationItem; onClose: () =>
         )}
         {data && data.options.length === 0 && (
           <p className="text-sm text-muted">
-            The engine found no placement. Handle this manually, then use Resolve to record how.
+            The engine found no placement. You can re-plan against the current schedule, or
+            handle this manually and use Resolve to record how.
           </p>
+        )}
+        {canReplan && (
+          <div className="flex flex-col gap-2 rounded-control bg-canvas/70 p-3">
+            {(anyExpired || nothingApplicable) && (
+              <p className="text-sm text-warning">
+                {anyExpired
+                  ? 'Some options have expired — the schedule has moved on since they were proposed.'
+                  : 'None of these options can be applied right now.'}
+              </p>
+            )}
+            <div>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => replan.mutate(item.decision_id)}
+                loading={replan.isPending}
+              >
+                Re-plan
+              </Button>
+            </div>
+            {replanError && (
+              <p role="alert" className="text-sm text-danger">
+                {replanError}
+              </p>
+            )}
+          </div>
         )}
         {data && data.options.length > 0 && (
           <>
@@ -342,7 +383,11 @@ function OptionsDialog({ item, onClose }: { item: EscalationItem; onClose: () =>
                   </div>
                 ) : (
                   <p className="text-xs text-warning">
-                    Not applicable automatically: {opt.reject_reasons.map(reasonText).join(' · ')}
+                    {opt.expired
+                      ? 'Expired — re-plan to refresh this option.'
+                      : `Not applicable automatically: ${opt.reject_reasons
+                          .map(reasonText)
+                          .join(' · ')}`}
                   </p>
                 )}
               </div>

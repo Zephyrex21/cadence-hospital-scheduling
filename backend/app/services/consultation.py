@@ -25,6 +25,7 @@ from app.models.base import ensure_aware_utc
 from app.models.user import User
 from app.scheduling.queue import QueueItem, compute_queue
 from app.services.audit import record_audit
+from app.services.locking import lock_doctors
 
 _ACTIVE = (
     AppointmentStatus.BOOKED,
@@ -92,6 +93,18 @@ def list_queue(db: Session, now: datetime, doctor_id: int | None = None) -> list
     return result
 
 
+# Who may perform each action. Arrival and no-show are front-desk tasks; starting and
+# completing a consultation are clinical. (A doctor is further limited to their own patients.)
+_FRONT_DESK = {Role.RECEPTIONIST, Role.TRIAGE_NURSE, Role.DOCTOR, Role.ADMINISTRATOR}
+_CLINICAL = {Role.DOCTOR, Role.ADMINISTRATOR}
+_ACTION_ROLES: dict[ConsultationAction, set[Role]] = {
+    ConsultationAction.CHECK_IN: _FRONT_DESK,
+    ConsultationAction.NO_SHOW: _FRONT_DESK,
+    ConsultationAction.START: _CLINICAL,
+    ConsultationAction.COMPLETE: _CLINICAL,
+}
+
+
 def change_consultation_status(
     db: Session,
     appointment_id: int,
@@ -100,7 +113,19 @@ def change_consultation_status(
     actor: User,
     expected_version: int | None = None,
 ) -> Appointment:
-    appt = db.get(Appointment, appointment_id, with_for_update={"of": Appointment})
+    if actor.role not in _ACTION_ROLES[action]:
+        raise ForbiddenError(f"Your role cannot {action.value.replace('_', ' ')} a patient")
+
+    peek = db.get(Appointment, appointment_id)
+    if peek is None:
+        raise NotFoundError("Appointment not found")
+    if action == ConsultationAction.START:
+        # Same lock order as the emergency flow (doctor lock first, then the row), so two
+        # simultaneous "start" clicks can't both pass the one-at-a-time check below.
+        lock_doctors(db, [peek.doctor_id])
+    appt = db.get(
+        Appointment, appointment_id, with_for_update={"of": Appointment}, populate_existing=True
+    )
     if appt is None:
         raise NotFoundError("Appointment not found")
 
@@ -116,6 +141,20 @@ def change_consultation_status(
         )
     if expected_version is not None and expected_version != appt.version:
         raise ConflictError("Appointment was modified by someone else; reload and retry")
+
+    if action == ConsultationAction.START:
+        busy = db.scalar(
+            select(Appointment.id).where(
+                Appointment.doctor_id == appt.doctor_id,
+                Appointment.status == AppointmentStatus.IN_PROGRESS,
+                Appointment.id != appt.id,
+            ).limit(1)
+        )
+        if busy is not None:
+            raise ConflictError(
+                "This doctor already has a consultation in progress. Complete it first.",
+                details={"code": "consultation_in_progress"},
+            )
 
     before = {"status": appt.status.value, "version": appt.version}
     appt.status = target

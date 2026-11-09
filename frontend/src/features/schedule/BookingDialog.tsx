@@ -27,6 +27,10 @@ export function BookingDialog({ date, defaultDoctorId, onClose, onBooked }: Book
   const [typeId, setTypeId] = useState<number | null>(null)
   const [start, setStart] = useState<string | null>(null)
 
+  const doctorSpecialty = (doctors.data ?? []).find((d) => d.id === doctorId)?.specialty
+  const typesForDoctor = (types.data ?? []).filter(
+    (t) => doctorSpecialty == null || t.specialty === doctorSpecialty,
+  )
   const slots = useSlots(doctorId, typeId, date)
   const book = useBookAppointment()
   const { toast } = useToast()
@@ -77,8 +81,13 @@ export function BookingDialog({ date, defaultDoctorId, onClose, onBooked }: Book
             name="booking-doctor"
             value={doctorId ?? ''}
             onChange={(e) => {
-              setDoctorId(e.target.value ? Number(e.target.value) : null)
+              const next = e.target.value ? Number(e.target.value) : null
+              setDoctorId(next)
               setStart(null)
+              // An appointment type belongs to a specialty: drop a type this doctor can't take.
+              const specialty = (doctors.data ?? []).find((d) => d.id === next)?.specialty
+              const current = (types.data ?? []).find((t) => t.id === typeId)
+              if (current && specialty && current.specialty !== specialty) setTypeId(null)
             }}
           >
             <option value="" disabled>
@@ -102,7 +111,7 @@ export function BookingDialog({ date, defaultDoctorId, onClose, onBooked }: Book
             <option value="" disabled>
               Select type
             </option>
-            {(types.data ?? []).map((t) => (
+            {typesForDoctor.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name} · {t.default_duration_min}m
               </option>

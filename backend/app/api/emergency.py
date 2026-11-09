@@ -31,6 +31,7 @@ from app.services.emergency import (
     escalation_options,
     latest_triage,
     plan_emergency,
+    replan_escalation,
 )
 
 router = APIRouter(tags=["emergency"])
@@ -114,6 +115,17 @@ def get_escalation_options(
 ) -> OptionsResponse:
     """The ranked options a clinician can choose from for an unresolved escalation."""
     return OptionsResponse.model_validate(escalation_options(db, decision_id))
+
+
+@router.post("/escalations/{decision_id}/replan", response_model=OptionsResponse)
+def replan_escalation_options(
+    decision_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(*APPLY_ROLES)),
+) -> OptionsResponse:
+    """Refresh a stale escalation's options against the current schedule."""
+    result = replan_escalation(db, decision_id=decision_id, actor_id=actor.id)
+    return OptionsResponse.model_validate(result)
 
 
 @router.post("/escalations/{decision_id}/apply", response_model=CommitResponse)

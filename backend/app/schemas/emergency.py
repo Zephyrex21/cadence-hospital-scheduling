@@ -119,6 +119,8 @@ class CommitResponse(BaseModel):
 class OptionOut(PlanOut):
     index: int
     applicable: bool
+    # Proposed too long ago to apply any more (re-plan to refresh it).
+    expired: bool = False
 
 
 class OptionsResponse(BaseModel):
