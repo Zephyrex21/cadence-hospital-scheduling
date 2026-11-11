@@ -35,6 +35,15 @@ class LoginThrottle:
                     "Too many failed sign-in attempts. Try again later.", retry_after=retry
                 )
 
+    def lockout_remaining(self, key: str, *, limit: int, window_sec: int) -> int:
+        """Seconds until ``key`` may fail again without being throttled (0 = not limited)."""
+        now = time.monotonic()
+        with self._lock:
+            hits = self._purge(key, window_sec, now)
+            if len(hits) >= limit:
+                return max(1, int(window_sec - (now - hits[0])))
+        return 0
+
     def fail(self, key: str) -> None:
         with self._lock:
             self._fails.setdefault(key, []).append(time.monotonic())

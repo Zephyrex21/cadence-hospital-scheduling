@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiFetch } from '../../lib/api'
 import type { Patient } from '../../types'
@@ -33,5 +33,31 @@ export function useRegisterPatient() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['patients'] })
     },
+  })
+}
+
+const PAGE_SIZE = 50
+
+/** The patient list, 50 at a time (the server caps a single response). */
+export function usePatientPages(query: string) {
+  return useInfiniteQuery({
+    queryKey: ['patients', 'pages', query],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) =>
+      apiFetch<Patient[]>(
+        `/patients?limit=${PAGE_SIZE}&offset=${pageParam}${
+          query ? `&q=${encodeURIComponent(query)}` : ''
+        }`,
+      ),
+    getNextPageParam: (last, all) => (last.length === PAGE_SIZE ? all.length * PAGE_SIZE : undefined),
+  })
+}
+
+/** How many patients match, so the page can say "50 of 64". */
+export function usePatientCount(query: string) {
+  return useQuery({
+    queryKey: ['patients', 'count', query],
+    queryFn: () =>
+      apiFetch<{ total: number }>(`/patients/count${query ? `?q=${encodeURIComponent(query)}` : ''}`),
   })
 }

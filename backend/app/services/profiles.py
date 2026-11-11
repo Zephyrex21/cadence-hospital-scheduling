@@ -17,12 +17,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from pymongo.errors import PyMongoError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.enums import AuditAction, Role
 from app.core.errors import (
+    ConflictError,
     ForbiddenError,
     NotFoundError,
     ProfileStoreDisabledError,
@@ -69,6 +70,10 @@ _ROLE_DETAIL = {
 def _store_errors() -> Iterator[None]:
     try:
         yield
+    except DuplicateKeyError as exc:
+        # A unique index (employee id, MRN…) was hit: the caller's data is the problem,
+        # not the store.
+        raise ConflictError("That value is already used by another profile") from exc
     except PyMongoError as exc:
         log.warning("MongoDB operation failed: %s", exc)
         raise ProfileStoreError(

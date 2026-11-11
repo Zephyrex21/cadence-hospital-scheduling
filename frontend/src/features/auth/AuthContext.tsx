@@ -9,9 +9,9 @@ import {
 } from 'react'
 
 import { ApiError, AUTH_EXPIRED_EVENT } from '../../lib/api'
-import { clearTokens, getAccessToken, storeTokens } from '../../lib/auth-storage'
+import { clearTokens, getAccessToken, getRefreshToken, storeTokens } from '../../lib/auth-storage'
 import type { User } from '../../types'
-import { fetchMe, loginRequest } from './api'
+import { fetchMe, loginRequest, logoutRequest } from './api'
 
 interface AuthState {
   user: User | null
@@ -71,6 +71,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
+    const refresh = getRefreshToken()
+    if (refresh) void logoutRequest(refresh) // revoke server-side so a copy is useless
     clearTokens()
     setUser(null)
     setStatus('anonymous')

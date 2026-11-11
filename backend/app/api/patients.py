@@ -11,7 +11,7 @@ from app.core.enums import Role
 from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.patient import PatientCreate, PatientRead
-from app.services.patients import create_patient, get_patient, search_patients
+from app.services.patients import count_patients, create_patient, get_patient, search_patients
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -22,10 +22,22 @@ WRITE_ROLES = (Role.RECEPTIONIST, Role.TRIAGE_NURSE, Role.ADMINISTRATOR)
 @router.get("", response_model=list[PatientRead])
 def list_patients(
     q: str | None = Query(default=None, description="Search by name, MRN, contact or city"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ) -> list[Patient]:
-    return search_patients(db, q)
+    return search_patients(db, q, limit=limit, offset=offset)
+
+
+# Declared before "/{patient_id}" so "count" is not parsed as an id.
+@router.get("/count")
+def patient_count(
+    q: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> dict[str, int]:
+    return {"total": count_patients(db, q)}
 
 
 @router.post("", response_model=PatientRead, status_code=status.HTTP_201_CREATED)

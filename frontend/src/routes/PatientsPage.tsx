@@ -17,7 +17,7 @@ import { TableSkeleton } from '../components/Skeleton'
 import { EmptyState, ErrorState } from '../components/states'
 import { useAuth } from '../features/auth/AuthContext'
 import { canRegisterPatients } from '../features/auth/roles'
-import { usePatients } from '../features/patients/api'
+import { usePatientCount, usePatientPages } from '../features/patients/api'
 import { formatAge, formatDob, initials, sexLabel } from '../features/patients/format'
 import { PatientForm } from '../features/patients/PatientForm'
 import { usePatientProfile } from '../features/profiles/api'
@@ -32,9 +32,10 @@ export function PatientsPage() {
   const [query, setQuery] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [selected, setSelected] = useState<Patient | null>(null)
-  const patients = usePatients(query)
+  const patients = usePatientPages(query)
+  const count = usePatientCount(query)
   const canRegister = user ? canRegisterPatients(user.role) : false
-  const rows = patients.data ?? []
+  const rows = patients.data?.pages.flat() ?? []
 
   // Debounce the server search so typing doesn't fire a request per keystroke.
   useEffect(() => {
@@ -49,7 +50,7 @@ export function PatientsPage() {
           <h2 className="font-display text-title font-semibold text-ink">Patients</h2>
           <p className="mt-1 text-sm text-muted">
             Search, register and review patient records
-            {patients.data ? ` · ${patients.data.length} shown` : ''}.
+            {patients.data ? ` · ${rows.length} of ${count.data?.total ?? rows.length} shown` : ''}.
           </p>
         </div>
         {canRegister ? (
@@ -155,6 +156,17 @@ export function PatientsPage() {
             hint={query ? undefined : 'Register a patient to get started.'}
           />
         )}
+        {patients.hasNextPage ? (
+          <div className="flex justify-center border-t border-hairline p-3">
+            <Button
+              variant="secondary"
+              onClick={() => void patients.fetchNextPage()}
+              loading={patients.isFetchingNextPage}
+            >
+              Load more
+            </Button>
+          </div>
+        ) : null}
       </Card>
 
       {showForm && canRegister ? (

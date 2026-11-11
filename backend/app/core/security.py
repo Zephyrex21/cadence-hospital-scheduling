@@ -7,6 +7,7 @@ signed with HS256 using ``settings.jwt_secret`` and carry the user id (``sub``),
 
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
@@ -32,7 +33,9 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def _create_token(subject: str, role: str, token_type: TokenType, ttl_min: int) -> str:
+def _create_token(
+    subject: str, role: str, token_type: TokenType, ttl_min: int, jti: str | None = None
+) -> str:
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "sub": subject,
@@ -41,6 +44,8 @@ def _create_token(subject: str, role: str, token_type: TokenType, ttl_min: int) 
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=ttl_min)).timestamp()),
     }
+    if jti is not None:
+        payload["jti"] = jti
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
@@ -50,6 +55,17 @@ def create_access_token(subject: str, role: str) -> str:
 
 def create_refresh_token(subject: str, role: str) -> str:
     return _create_token(subject, role, "refresh", settings.refresh_token_ttl_min)
+
+
+def new_refresh_token(subject: str, role: str) -> tuple[str, str, datetime]:
+    """A refresh token with a unique id, so the server can make it single-use.
+
+    Returns ``(token, jti, expires_at)``.
+    """
+    jti = uuid.uuid4().hex
+    token = _create_token(subject, role, "refresh", settings.refresh_token_ttl_min, jti)
+    expires = datetime.now(UTC) + timedelta(minutes=settings.refresh_token_ttl_min)
+    return token, jti, expires
 
 
 def decode_token(token: str) -> dict[str, Any]:

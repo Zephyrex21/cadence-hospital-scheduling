@@ -42,8 +42,12 @@ def test_wait_accumulates_down_a_single_doctor_queue() -> None:
 
 
 def test_higher_acuity_jumps_the_queue() -> None:
-    # A2 is scheduled later than A4 but must be served first.
-    items = [_item(1, 0, acuity=Acuity.A4), _item(2, 30, acuity=Acuity.A2)]
+    # Both patients are here. A2 is scheduled later than A4 but must be served first.
+    here = AppointmentStatus.CHECKED_IN
+    items = [
+        _item(1, 0, acuity=Acuity.A4, status=here),
+        _item(2, 30, acuity=Acuity.A2, status=here),
+    ]
     entries = {e.appointment_id: e for e in compute_queue(items, _at(0))}
     assert entries[2].position == 1 and entries[2].est_wait_min == 0
     assert entries[1].position == 2 and entries[1].est_wait_min == 30

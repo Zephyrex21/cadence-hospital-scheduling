@@ -404,6 +404,20 @@ def commit_emergency(
 
     try:
         if decision.status != "auto" or decision.chosen is None:
+            # One open escalation per patient: a second click / re-plan must not pile up
+            # duplicates in the inbox (only one of them could ever be applied).
+            open_id = db.scalar(
+                select(SchedulingDecision.id).where(
+                    SchedulingDecision.patient_id == patient_id,
+                    SchedulingDecision.status == "escalated",
+                    SchedulingDecision.resolved_at.is_(None),
+                ).limit(1)
+            )
+            if open_id is not None:
+                raise ConflictError(
+                    "This patient already has an open escalation. Review or resolve it first.",
+                    details={"code": "escalation_open", "decision_id": open_id},
+                )
             # Record the escalation for the audit trail; do not mutate the schedule.
             record = SchedulingDecision(
                 trigger=_TRIGGER,

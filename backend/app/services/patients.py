@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import secrets
+from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.enums import AuditAction
@@ -78,16 +79,29 @@ def get_patient(db: Session, patient_id: int) -> Patient:
     return patient
 
 
-def search_patients(db: Session, query: str | None, *, limit: int = 50) -> list[Patient]:
-    stmt = select(Patient).order_by(Patient.name)
-    if query:
-        like = f"%{query.strip()}%"
+def _matching(query: str | None) -> Any:
+    stmt = select(Patient)
+    if query and query.strip():
+        # Treat what the user typed literally: "%" and "_" are not wildcards in a name search.
+        escaped = query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like = f"%{escaped}%"
         stmt = stmt.where(
             or_(
-                Patient.name.ilike(like),
-                Patient.mrn.ilike(like),
-                Patient.contact.ilike(like),
-                Patient.city.ilike(like),
+                Patient.name.ilike(like, escape="\\"),
+                Patient.mrn.ilike(like, escape="\\"),
+                Patient.contact.ilike(like, escape="\\"),
+                Patient.city.ilike(like, escape="\\"),
             )
         )
-    return list(db.scalars(stmt.limit(limit)))
+    return stmt
+
+
+def search_patients(
+    db: Session, query: str | None, *, limit: int = 50, offset: int = 0
+) -> list[Patient]:
+    stmt = _matching(query).order_by(Patient.name, Patient.id).limit(limit).offset(offset)
+    return list(db.scalars(stmt))
+
+
+def count_patients(db: Session, query: str | None) -> int:
+    return int(db.scalar(select(func.count()).select_from(_matching(query).subquery())) or 0)

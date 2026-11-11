@@ -60,18 +60,17 @@ def compute_queue(items: list[QueueItem], now: datetime) -> list[QueueEntry]:
 
     entries: list[QueueEntry] = []
     for doctor_id, group in by_doctor.items():
-        in_progress = sorted(
-            (g for g in group if g.status == AppointmentStatus.IN_PROGRESS),
-            key=lambda g: g.scheduled_start,
-        )
-        waiting = sorted(
-            (g for g in group if g.status in _WAITING),
-            key=lambda g: (ACUITY_LEVEL[g.acuity], g.scheduled_start, g.appointment_id),
-        )
+        pending = [g for g in group if g.status in _WAITING]
+
+        def priority(g: QueueItem) -> tuple[int, datetime, int]:
+            return (ACUITY_LEVEL[g.acuity], g.scheduled_start, g.appointment_id)
 
         cursor = now
         position = 0
-        for ip in in_progress:
+        for ip in sorted(
+            (g for g in group if g.status == AppointmentStatus.IN_PROGRESS),
+            key=lambda g: g.scheduled_start,
+        ):
             position += 1
             entries.append(
                 QueueEntry(ip.appointment_id, doctor_id, ip.acuity, ip.status,
@@ -79,14 +78,24 @@ def compute_queue(items: list[QueueItem], now: datetime) -> list[QueueEntry]:
             )
             # The protected consult runs at least until its scheduled end.
             cursor = max(cursor, ip.scheduled_end)
-        for w in waiting:
+
+        # Simulate the doctor's day. Someone is only served once they are actually *here*:
+        # checked in, or their appointment time has come. If nobody is, the doctor is idle
+        # until the next booked time (so a patient booked for 15:00 is not "next in line" at 09:00).
+        while pending:
+            here = [g for g in pending if g.status == AppointmentStatus.CHECKED_IN
+                    or g.scheduled_start <= cursor]
+            if not here:
+                cursor = min(g.scheduled_start for g in pending)
+                continue
+            nxt = min(here, key=priority)
+            pending.remove(nxt)
             position += 1
             wait = max(0, round((cursor - now).total_seconds() / 60.0))
             entries.append(
-                QueueEntry(w.appointment_id, doctor_id, w.acuity, w.status,
-                           w.scheduled_start, wait, position)
+                QueueEntry(nxt.appointment_id, doctor_id, nxt.acuity, nxt.status,
+                           nxt.scheduled_start, wait, position)
             )
-            cursor = cursor + (w.scheduled_end - w.scheduled_start)
-
+            cursor = cursor + (nxt.scheduled_end - nxt.scheduled_start)
     entries.sort(key=lambda e: (ACUITY_LEVEL[e.acuity], e.scheduled_start, e.appointment_id))
     return entries

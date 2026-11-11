@@ -11,6 +11,7 @@ from app.models.decision import SchedulingDecision
 from app.models.displacement import AppointmentDisplacement
 from app.models.doctor import DoctorProfile
 from app.models.patient import Patient
+from app.models.refresh_token import RefreshToken
 from app.models.shift import Shift
 from app.models.triage import TriageAssessment
 from app.models.user import User
@@ -22,6 +23,7 @@ __all__ = [
     "AuditLog",
     "DoctorProfile",
     "Patient",
+    "RefreshToken",
     "SchedulingDecision",
     "Shift",
     "TriageAssessment",

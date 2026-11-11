@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.clock import clinic_day_bounds
@@ -31,12 +31,19 @@ _ACTIVE = (
     AppointmentStatus.CHECKED_IN,
     AppointmentStatus.IN_PROGRESS,
 )
-_WAITING = (AppointmentStatus.BOOKED, AppointmentStatus.CHECKED_IN)
 _MAX_ESCALATIONS = 10
 
 
 def _count(db: Session, stmt: Any) -> int:
-    return len(list(db.scalars(stmt)))
+    return int(db.scalar(select(func.count()).select_from(stmt.subquery())) or 0)
+
+
+def is_waiting(a: Appointment, now: datetime) -> bool:
+    """A patient is *waiting* once they are actually here (checked in) or their appointment
+    time has come — not merely because they are booked for later today."""
+    if a.status == AppointmentStatus.CHECKED_IN:
+        return True
+    return a.status == AppointmentStatus.BOOKED and ensure_aware_utc(a.scheduled_start) <= now
 
 
 def summary(db: Session, now: datetime) -> dict[str, Any]:
@@ -57,7 +64,7 @@ def summary(db: Session, now: datetime) -> dict[str, Any]:
     total_waiting = 0
     in_progress = 0
     for a in active:
-        if a.status in _WAITING:
+        if is_waiting(a, now):
             waiting_by_acuity[a.acuity.value] += 1
             total_waiting += 1
         elif a.status == AppointmentStatus.IN_PROGRESS:
@@ -164,7 +171,7 @@ def _doctor_load(
             {
                 "doctor_id": doctor_id,
                 "name": name,
-                "waiting": sum(1 for a in appts if a.status in _WAITING),
+                "waiting": sum(1 for a in appts if is_waiting(a, now)),
                 "in_progress": sum(1 for a in appts if a.status == AppointmentStatus.IN_PROGRESS),
                 "running_delay_min": doctor_running_delay(items, now),
             }
