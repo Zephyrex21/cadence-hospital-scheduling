@@ -164,17 +164,30 @@ def _mirror_legacy_columns(patient: Patient, doc: dict[str, Any], touched: set[s
 # --- patients ------------------------------------------------------------------------
 
 
-def patient_profile_view(db: Session, mdb: Any | None, patient_id: int) -> dict[str, Any]:
+# Allergies, conditions and medications are clinical information: the front desk does not
+# need them to register, schedule or check a patient in, so they never leave the server for it.
+_CAN_SEE_MEDICAL = {Role.DOCTOR, Role.TRIAGE_NURSE, Role.ADMINISTRATOR}
+
+
+def patient_profile_view(
+    db: Session, mdb: Any | None, patient_id: int, *, viewer: User | None = None
+) -> dict[str, Any]:
     patient = get_patient(db, patient_id)  # 404 if unknown
     view: dict[str, Any] = {"enabled": mdb is not None, "available": False, "patient": patient,
-                            "profile": None}
+                            "profile": None, "redacted": []}
     if mdb is None:
         return view
     try:
-        view["profile"] = repo.get_patient_doc(mdb, patient_id)
+        profile = repo.get_patient_doc(mdb, patient_id)
         view["available"] = True
     except PyMongoError as exc:
         log.warning("Could not read patient profile %s: %s", patient_id, exc)
+        return view
+    if profile is not None and viewer is not None and viewer.role not in _CAN_SEE_MEDICAL:
+        if "medical" in profile:
+            profile = {k: v for k, v in profile.items() if k != "medical"}
+        view["redacted"] = ["medical"]
+    view["profile"] = profile
     return view
 
 
@@ -211,7 +224,7 @@ def update_patient_profile(
         after={"sections": sorted(sections)},
     )
     db.commit()
-    return patient_profile_view(db, store, patient_id)
+    return patient_profile_view(db, store, patient_id, viewer=actor)
 
 
 def create_base_profile(mdb: Any, patient: Patient, *, actor_id: int | None) -> None:

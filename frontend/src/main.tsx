@@ -10,6 +10,7 @@ import { AuthProvider } from './features/auth/AuthContext'
 import { ApiError } from './lib/api'
 import { startBackendCheck } from './lib/backend'
 import './styles/index.css'
+import { ClinicTimezoneGate } from './components/ClinicTimezoneGate'
 import { ThemeProvider } from './theme/ThemeProvider'
 
 const queryClient = new QueryClient({
@@ -46,7 +47,9 @@ createRoot(document.getElementById('root')!).render(
             <BrowserRouter>
               <AuthProvider>
                 <ToastProvider>
-                  <App />
+                  <ClinicTimezoneGate>
+                    <App />
+                  </ClinicTimezoneGate>
                 </ToastProvider>
               </AuthProvider>
             </BrowserRouter>

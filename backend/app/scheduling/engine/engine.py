@@ -97,6 +97,17 @@ def _anchors(
     return sorted(fitting)[: params.max_anchors_per_doctor]
 
 
+def _earliest_fit(
+    cursor: datetime, duration: timedelta, shifts: tuple[Interval, ...]
+) -> datetime | None:
+    """The earliest start >= ``cursor`` at which ``duration`` fits entirely inside a shift."""
+    for shift in sorted(shifts, key=lambda sh: sh.start):
+        start = max(cursor, shift.start)
+        if start + duration <= shift.end:
+            return start
+    return None
+
+
 def _build_candidate(
     doctor_id: int,
     start: datetime,
@@ -128,8 +139,11 @@ def _build_candidate(
     for a in sorted(affected, key=lambda x: (x.start, x.id)):
         if a.start >= cursor:
             break  # the gap absorbs the ripple; nothing further moves
-        new_iv = Interval(cursor, cursor + a.duration)
-        to_start: datetime | None = cursor if fits_in_any(new_iv, list(shifts)) else None
+        # Push the appointment to the earliest moment it fits: right after the emergency, or,
+        # if that falls outside working hours (the lunch break, the end of a shift), at the
+        # start of the next shift. None only when it would not fit anywhere.
+        to_start = _earliest_fit(cursor, a.duration, shifts)
+        new_iv = Interval(to_start or cursor, (to_start or cursor) + a.duration)
         moves.append(
             Move(
                 a.id,
@@ -252,6 +266,12 @@ def insert_emergency(
             if built is not None:
                 candidates.append(built)
 
+    if request.acuity == Acuity.A5:
+        # Routine arrivals never displace booked patients — not even as an option a
+        # clinician could pick from the escalation list.
+        candidates = [c for c in candidates if not c.moves]
+        if not candidates:
+            return Decision("escalate", None, (), ("no_feasible_plan",), request, params)
     if not candidates:
         return Decision("infeasible", None, (), ("no_candidates",), request, params)
 
@@ -266,10 +286,6 @@ def insert_emergency(
         return Decision(
             "escalate", None, options, ("acuity_a1_human_directed",), request, params
         )
-
-    # Routine (A5) arrivals never displace booked patients.
-    if request.acuity == Acuity.A5:
-        feasible = [c for c in feasible if not c.moves]
 
     if not feasible:
         worst = sorted(candidates, key=_rank_key)[:_TOP_ALTERNATIVES]

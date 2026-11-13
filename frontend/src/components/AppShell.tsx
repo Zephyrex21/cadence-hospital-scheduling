@@ -4,7 +4,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../features/auth/AuthContext'
 import { EMERGENCY_ROLES, ROLE_LABELS } from '../features/auth/roles'
-import { CLINIC_TZ_LABEL, formatDateShort, formatTime } from '../lib/time'
+import { clinicTzLabel, formatDateShort, formatTime } from '../lib/time'
 import { ThemeToggle } from '../theme/ThemeToggle'
 import type { Role, User } from '../types'
 import { BrandMark } from './BrandMark'
@@ -256,7 +256,7 @@ function ClinicClock() {
       <span className="text-muted">{formatDateShort(now)}</span>
       <span className="font-medium tabular-nums text-ink">{formatTime(now)}</span>
       <span className="rounded-pill bg-ink/[0.06] px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-muted">
-        {CLINIC_TZ_LABEL}
+        {clinicTzLabel()}
       </span>
     </div>
   )

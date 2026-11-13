@@ -12,7 +12,13 @@ function formatAddress(a: PatientProfile['address']): string {
 }
 
 /** Read-only view of a patient's MongoDB profile. */
-export function PatientProfileView({ profile: p }: { profile: PatientProfile }) {
+export function PatientProfileView({
+  profile: p,
+  redacted = [],
+}: {
+  profile: PatientProfile
+  redacted?: string[]
+}) {
   const address = formatAddress(p.address)
   const medical = p.medical
   const noMedical =
@@ -78,7 +84,9 @@ export function PatientProfileView({ profile: p }: { profile: PatientProfile }) 
       </Block>
 
       <Block title="Medical (reported — not a clinical record)" wide>
-        {noMedical ? (
+        {redacted.includes('medical') ? (
+          <span className="text-muted">Restricted to clinical staff</span>
+        ) : noMedical ? (
           <NotRecorded />
         ) : (
           <div className="flex flex-col gap-2.5">

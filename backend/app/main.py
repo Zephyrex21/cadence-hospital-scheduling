@@ -25,7 +25,7 @@ from app.api.patients import router as patients_router
 from app.api.profiles import router as profiles_router
 from app.api.scheduling import router as scheduling_router
 from app.core.config import settings
-from app.core.errors import AppError, app_error_handler
+from app.core.errors import AppError, app_error_handler, unhandled_error_handler
 from app.core.migrate import run_migrations
 
 _log = logging.getLogger("uvicorn.error.cadence.main")
@@ -85,6 +85,7 @@ def create_app() -> FastAPI:
     )
 
     app.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(Exception, unhandled_error_handler)
 
     app.include_router(health_router)
     app.include_router(auth_router)

@@ -6,6 +6,7 @@ frontend can branch on a stable ``code`` rather than parsing prose.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import Request
@@ -70,6 +71,25 @@ class RateLimitError(AppError):
     def __init__(self, message: str, *, retry_after: int) -> None:
         super().__init__(message, details={"retry_after_sec": retry_after})
         self.retry_after = retry_after
+
+
+_log = logging.getLogger("uvicorn.error.cadence.errors")
+
+
+def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Any crash answers in the same JSON envelope as every other error (so the UI can show
+    a real message instead of "Request failed"); the traceback goes to the server log."""
+    _log.error("Unhandled error on %s %s", request.method, request.url.path, exc_info=exc)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": "internal_error",
+                "message": "Something went wrong on our side. Please try again.",
+                "details": None,
+            }
+        },
+    )
 
 
 def app_error_handler(_: Request, exc: AppError) -> JSONResponse:

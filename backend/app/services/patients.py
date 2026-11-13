@@ -6,6 +6,7 @@ import secrets
 from typing import Any
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.enums import AuditAction
@@ -28,28 +29,31 @@ def _clean(value: str | None) -> str | None:
 
 
 def create_patient(db: Session, data: PatientCreate, *, actor_id: int) -> Patient:
-    mrn: str | None = None
+    # Allocate the MRN by *inserting* it inside a savepoint and retrying on a collision, rather
+    # than checking first: two simultaneous registrations could otherwise both pass the check.
+    patient: Patient | None = None
     for _ in range(_MRN_ATTEMPTS):
-        candidate = _generate_mrn()
-        if db.scalar(select(Patient.id).where(Patient.mrn == candidate)) is None:
-            mrn = candidate
-            break
-    if mrn is None:
+        candidate = Patient(
+            mrn=_generate_mrn(),
+            name=data.name.strip(),
+            date_of_birth=data.date_of_birth,
+            sex=data.sex,
+            contact=_clean(data.contact),
+            city=_clean(data.city),
+            blood_group=_clean(data.blood_group),
+            emergency_contact=_clean(data.emergency_contact),
+            notes=_clean(data.notes),
+        )
+        try:
+            with db.begin_nested():
+                db.add(candidate)
+                db.flush()  # assigns patient.id; raises if the MRN is taken
+        except IntegrityError:
+            continue
+        patient = candidate
+        break
+    if patient is None:
         raise ConflictError("Could not allocate a unique MRN; please retry")
-
-    patient = Patient(
-        mrn=mrn,
-        name=data.name.strip(),
-        date_of_birth=data.date_of_birth,
-        sex=data.sex,
-        contact=_clean(data.contact),
-        city=_clean(data.city),
-        blood_group=_clean(data.blood_group),
-        emergency_contact=_clean(data.emergency_contact),
-        notes=_clean(data.notes),
-    )
-    db.add(patient)
-    db.flush()  # assigns patient.id
 
     record_audit(
         db,

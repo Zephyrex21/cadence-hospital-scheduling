@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -17,17 +17,22 @@ from app.models.base import utcnow
 
 class AppointmentDisplacement(Base):
     __tablename__ = "appointment_displacements"
+    __table_args__ = (
+        Index("ix_displacements_appointment_id", "appointment_id"),
+        Index("ix_displacements_decision_id", "decision_id"),
+        Index("ix_displacements_created_at", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     appointment_id: Mapped[int] = mapped_column(
-        ForeignKey("appointments.id"), nullable=False, index=True
+        ForeignKey("appointments.id"), nullable=False
     )
     decision_id: Mapped[int] = mapped_column(
-        ForeignKey("scheduling_decisions.id"), nullable=False, index=True
+        ForeignKey("scheduling_decisions.id"), nullable=False
     )
     from_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     to_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     reason: Mapped[str] = mapped_column(String(80), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+        DateTime(timezone=True), default=utcnow, nullable=False
     )

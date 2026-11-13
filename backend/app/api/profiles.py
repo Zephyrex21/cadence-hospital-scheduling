@@ -27,6 +27,8 @@ class PatientProfileResponse(BaseModel):
     available: bool  # …and did it answer?
     patient: PatientRead
     profile: dict[str, Any] | None
+    # Sections withheld from this viewer's role (e.g. "medical" for the front desk).
+    redacted: list[str] = []
 
 
 class StaffUser(BaseModel):
@@ -48,9 +50,9 @@ def read_patient_profile(
     patient_id: int,
     db: Session = Depends(get_db),
     mdb: Any = Depends(get_mongo_db),
-    _: User = Depends(get_current_user),
+    viewer: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    return svc.patient_profile_view(db, mdb, patient_id)
+    return svc.patient_profile_view(db, mdb, patient_id, viewer=viewer)
 
 
 @router.put("/patients/{patient_id}/profile", response_model=PatientProfileResponse)

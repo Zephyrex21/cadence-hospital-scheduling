@@ -233,7 +233,7 @@ function PatientDetails({ patient, onClose }: { patient: Patient; onClose: () =>
         </div>
 
         {data?.profile ? (
-          <PatientProfileView profile={data.profile} />
+          <PatientProfileView profile={data.profile} redacted={data.redacted} />
         ) : (
           <>
             {data?.enabled && !data.available ? (

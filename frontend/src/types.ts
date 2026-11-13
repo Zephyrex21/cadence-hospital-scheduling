@@ -333,6 +333,8 @@ export interface PatientProfileResponse {
   available: boolean
   patient: Patient
   profile: PatientProfile | null
+  /** Sections withheld from the viewer's role, e.g. "medical" for the front desk. */
+  redacted?: string[]
 }
 
 export interface Qualification {

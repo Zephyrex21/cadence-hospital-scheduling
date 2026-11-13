@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from pymongo.errors import PyMongoError
 
+from app.core.config import settings
 from app.core.mongo import get_mongo_db
 
 router = APIRouter(tags=["health"])
@@ -23,6 +24,16 @@ class HealthResponse(BaseModel):
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     return HealthResponse(status="ok", service="cadence-api")
+
+
+class PublicConfig(BaseModel):
+    clinic_timezone: str
+
+
+@router.get("/config", response_model=PublicConfig)
+def public_config() -> PublicConfig:
+    """Settings the UI must agree with the server on (e.g. how to display clinic times)."""
+    return PublicConfig(clinic_timezone=settings.clinic_timezone)
 
 
 class MongoHealth(BaseModel):

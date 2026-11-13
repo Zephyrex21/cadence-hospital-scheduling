@@ -254,7 +254,11 @@ def cancel_appointment(
     appt = db.get(Appointment, appointment_id, with_for_update={"of": Appointment})
     if appt is None:
         raise NotFoundError("Appointment not found")
-    if appt.status in (AppointmentStatus.CANCELLED, AppointmentStatus.COMPLETED):
+    if appt.status in (
+        AppointmentStatus.CANCELLED,
+        AppointmentStatus.COMPLETED,
+        AppointmentStatus.NO_SHOW,
+    ):
         raise ConflictError(f"Cannot cancel an appointment that is {appt.status.value}")
     if appt.status == AppointmentStatus.IN_PROGRESS:
         raise ConflictError("Cannot cancel a consultation that is in progress")

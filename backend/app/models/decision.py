@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
@@ -19,6 +19,10 @@ from app.models.base import utcnow
 
 class SchedulingDecision(Base):
     __tablename__ = "scheduling_decisions"
+    __table_args__ = (
+        Index("ix_decisions_created_at", "created_at"),
+        Index("ix_decisions_idempotency_key", "idempotency_key", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     trigger: Mapped[str] = mapped_column(String(40), nullable=False)  # e.g. emergency_insert
@@ -31,7 +35,7 @@ class SchedulingDecision(Base):
         ForeignKey("appointments.id"), nullable=True
     )
     # Dedupe key so a double-clicked commit cannot apply twice.
-    idempotency_key: Mapped[str | None] = mapped_column(String(80), unique=True, nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
     # Hash of (actor, patient, type, acuity) bound to the idempotency key, so a
     # reused key with a *different* request is rejected instead of silently
@@ -45,7 +49,7 @@ class SchedulingDecision(Base):
     reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=utcnow, nullable=False, index=True
+        DateTime(timezone=True), default=utcnow, nullable=False
     )
 
     # Escalation lifecycle: an escalated decision is "resolved" once a nurse or
