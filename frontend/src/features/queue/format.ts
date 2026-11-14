@@ -1,4 +1,16 @@
-import type { AppointmentStatus, ConsultationAction } from '../../types'
+import type { AppointmentStatus, ConsultationAction, QueueEntry } from '../../types'
+
+/** Split the queue into patients who are here / in consultation ("live") and those merely
+ *  booked for later today. Mirrors the server's `waiting` flag, which is also what the
+ *  dashboard counts, so the two screens agree. Server order is preserved within each group. */
+export function splitQueue(entries: QueueEntry[]): { live: QueueEntry[]; later: QueueEntry[] } {
+  const live: QueueEntry[] = []
+  const later: QueueEntry[] = []
+  for (const entry of entries) {
+    ;(entry.status === 'in_progress' || entry.waiting ? live : later).push(entry)
+  }
+  return { live, later }
+}
 
 /** Human-readable wait estimate. 0 means the patient is next up. */
 export function formatWait(min: number): string {

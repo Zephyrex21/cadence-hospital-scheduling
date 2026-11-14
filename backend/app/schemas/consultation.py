@@ -24,6 +24,7 @@ class QueueEntryOut(BaseModel):
     appointment_id: int
     position: int
     est_wait_min: int
+    waiting: bool
     acuity: Acuity
     status: AppointmentStatus
     scheduled_start: datetime

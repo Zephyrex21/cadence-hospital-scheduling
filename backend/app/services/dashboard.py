@@ -24,7 +24,7 @@ from app.models.patient import Patient
 from app.models.shift import Shift
 from app.models.user import User
 from app.scheduling.dashboard import doctor_running_delay
-from app.scheduling.queue import QueueItem
+from app.scheduling.queue import QueueItem, is_here
 
 _ACTIVE = (
     AppointmentStatus.BOOKED,
@@ -41,9 +41,7 @@ def _count(db: Session, stmt: Any) -> int:
 def is_waiting(a: Appointment, now: datetime) -> bool:
     """A patient is *waiting* once they are actually here (checked in) or their appointment
     time has come — not merely because they are booked for later today."""
-    if a.status == AppointmentStatus.CHECKED_IN:
-        return True
-    return a.status == AppointmentStatus.BOOKED and ensure_aware_utc(a.scheduled_start) <= now
+    return is_here(a.status, ensure_aware_utc(a.scheduled_start), now)
 
 
 def summary(db: Session, now: datetime) -> dict[str, Any]:

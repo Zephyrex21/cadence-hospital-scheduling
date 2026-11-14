@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     mongodb_uri: str = ""
     mongodb_db: str = "cadence"
 
+    # How many reverse proxies we trust in front of the app (0 = none). Decides which
+    # X-Forwarded-For entry is the real client IP for the login throttle — see core/clientip.py.
+    # Render alone: 1. Browser -> Vercel rewrite -> Render: 2.
+    trusted_proxy_count: int = 0
+
     # Login brute-force protection (per client-IP + email, and per email).
     login_max_attempts: int = 5
     login_window_sec: int = 15 * 60

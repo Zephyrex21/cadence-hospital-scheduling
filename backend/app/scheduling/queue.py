@@ -21,6 +21,18 @@ from app.scheduling.engine import ACUITY_LEVEL
 _WAITING = (AppointmentStatus.BOOKED, AppointmentStatus.CHECKED_IN)
 
 
+def is_here(status: AppointmentStatus, scheduled_start: datetime, now: datetime) -> bool:
+    """Is this patient actually *waiting* right now?
+
+    True once they are checked in, or a booked appointment's time has come — not merely
+    because they are booked for later today. This single definition is shared by the queue
+    and the dashboard tiles so the two screens can never disagree.
+    """
+    if status == AppointmentStatus.CHECKED_IN:
+        return True
+    return status == AppointmentStatus.BOOKED and scheduled_start <= now
+
+
 @dataclass(frozen=True)
 class QueueItem:
     appointment_id: int
@@ -40,6 +52,7 @@ class QueueEntry:
     scheduled_start: datetime
     est_wait_min: int
     position: int  # 1-based position within the doctor's queue
+    waiting: bool = False  # actually here / due now (see ``is_here``); False = booked for later
 
 
 def _duration_min(item: QueueItem) -> float:
@@ -94,7 +107,8 @@ def compute_queue(items: list[QueueItem], now: datetime) -> list[QueueEntry]:
             wait = max(0, round((cursor - now).total_seconds() / 60.0))
             entries.append(
                 QueueEntry(nxt.appointment_id, doctor_id, nxt.acuity, nxt.status,
-                           nxt.scheduled_start, wait, position)
+                           nxt.scheduled_start, wait, position,
+                           waiting=is_here(nxt.status, nxt.scheduled_start, now))
             )
             cursor = cursor + (nxt.scheduled_end - nxt.scheduled_start)
     entries.sort(key=lambda e: (ACUITY_LEVEL[e.acuity], e.scheduled_start, e.appointment_id))

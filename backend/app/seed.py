@@ -384,7 +384,13 @@ def _normalise_clinic_start(candidate: datetime, duration_min: int) -> datetime:
     return candidate
 
 
-_LIVE_SLOT_EARLIEST = timedelta(hours=2, minutes=5)  # 11:05 with a 09:00 opening
+# Real clinics are never booked back-to-back: leave breathing room between consultations so an
+# emergency can usually be absorbed by a small ripple instead of always escalating.
+_QUEUE_GAP_MIN = 20  # slack between consecutive queued demo appointments
+_LIVE_SLOT_EARLIEST = timedelta(hours=2, minutes=45)  # 11:45 with a 09:00 opening
+# Alternate doctors run 15 minutes later. Their gaps fall exactly where the others are mid-
+# consultation, so the clinic never looks idle (someone is always with a patient).
+_STAGGER_MIN = 15
 
 
 def _live_anchor(now: datetime) -> datetime:
@@ -392,8 +398,8 @@ def _live_anchor(now: datetime) -> datetime:
     rounded = local.replace(minute=(local.minute // 15) * 15, second=0, microsecond=0)
     candidate = rounded - timedelta(minutes=15)
     opening = datetime.combine(local.date(), time(9, 0), tzinfo=settings.clinic_tz)
-    # The earliest the live slot may start: the moment the last morning history slot
-    # (10:50 follow-up, 15 min) ends, so there is neither an overlap nor an empty patch.
+    # The earliest the live slot may start: 15 minutes after the last morning history slot
+    # (11:15 follow-up, 15 min) ends, so there is no overlap and a little slack remains.
     candidate = max(candidate, opening + _LIVE_SLOT_EARLIEST)
     if time(13, 0) <= candidate.time() < time(14, 0):
         candidate = datetime.combine(local.date(), time(14, 0), tzinfo=settings.clinic_tz)
@@ -448,9 +454,9 @@ def _ensure_sample_appointments(db: Session) -> None:
     live_start = _live_anchor(now)
     history_slots = [
         (time(9, 0), "General OPD consultation", Acuity.A5),
-        (time(9, 35), "Follow-up visit", Acuity.A4),
-        (time(10, 0), "Extended consultation", Acuity.A5),
-        (time(10, 50), "Follow-up visit", Acuity.A5),
+        (time(9, 45), "Follow-up visit", Acuity.A4),
+        (time(10, 15), "Extended consultation", Acuity.A5),
+        (time(11, 15), "Follow-up visit", Acuity.A5),
     ]
     future_acuities = [Acuity.A2, Acuity.A3, Acuity.A4]
     current_types = {
@@ -466,6 +472,7 @@ def _ensure_sample_appointments(db: Session) -> None:
         if doctor is None:
             continue
         case_mrns = [f"CAD-{100001 + doctor_index * 10 + index:06d}" for index in range(10)]
+        stagger = timedelta(minutes=_STAGGER_MIN * (doctor_index % 2))
         doctor_slots: list[
             tuple[Patient, AppointmentType, datetime, Acuity, AppointmentOrigin]
         ] = []
@@ -477,7 +484,7 @@ def _ensure_sample_appointments(db: Session) -> None:
             appt_type = types.get(type_name)
             if patient is None or appt_type is None:
                 continue
-            local_start = datetime.combine(day, clock, tzinfo=settings.clinic_tz)
+            local_start = datetime.combine(day, clock, tzinfo=settings.clinic_tz) + stagger
             local_start = _normalise_clinic_start(local_start, appt_type.default_duration_min)
             start = local_start.astimezone(UTC)
             end = start + timedelta(minutes=appt_type.default_duration_min)
@@ -534,14 +541,14 @@ def _ensure_sample_appointments(db: Session) -> None:
                 else _type_for_specialty(types, specialty, index)
             )
             if index == 4:
-                local_start = live_start
+                local_start = _normalise_clinic_start(live_start + stagger, 30)
                 acuity = Acuity.A3 if doctor_index % 2 == 0 else Acuity.A4
             else:
                 previous_end = (doctor_slots[-1][2] + timedelta(
                     minutes=doctor_slots[-1][1].default_duration_min
                 )) if doctor_slots else live_start + timedelta(minutes=30)
                 local_previous_end = previous_end.astimezone(settings.clinic_tz)
-                candidate = local_previous_end + timedelta(minutes=5)
+                candidate = local_previous_end + timedelta(minutes=_QUEUE_GAP_MIN)
                 local_start = _normalise_clinic_start(candidate, appt_type.default_duration_min)
                 acuity = future_acuities[index - 5]
             start = local_start.astimezone(UTC)

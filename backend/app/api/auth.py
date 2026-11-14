@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 
+from app.core.clientip import client_ip
 from app.core.config import settings
 from app.core.db import get_db
 from app.core.deps import get_current_user
@@ -24,7 +25,7 @@ def login(
     body: LoginRequest, request: Request, db: Session = Depends(get_db)
 ) -> TokenResponse:
     email = body.email.strip().lower()
-    ip = request.client.host if request.client else "unknown"
+    ip = client_ip(request)
     pair_key, email_key = f"{ip}|{email}", f"email|{email}"
     window = settings.login_window_sec
     # Per client+email is strict: that client is blocked after a few failures.

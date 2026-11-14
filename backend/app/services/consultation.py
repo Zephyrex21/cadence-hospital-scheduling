@@ -82,6 +82,7 @@ def list_queue(db: Session, now: datetime, doctor_id: int | None = None) -> list
                 "appointment_id": e.appointment_id,
                 "position": e.position,
                 "est_wait_min": e.est_wait_min,
+                "waiting": e.waiting,
                 "acuity": e.acuity.value,
                 "status": e.status.value,
                 "scheduled_start": e.scheduled_start.isoformat(),

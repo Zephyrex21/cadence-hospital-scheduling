@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { ACTION_LABEL, availableActions, formatWait, type QueueAccess } from './format'
+import type { QueueEntry } from '../../types'
+import {
+  ACTION_LABEL,
+  availableActions,
+  formatWait,
+  splitQueue,
+  type QueueAccess,
+} from './format'
 
 const FULL: QueueAccess = { frontDesk: true, clinical: true }
 const NONE: QueueAccess = { frontDesk: false, clinical: false }
@@ -43,5 +50,35 @@ describe('availableActions by role', () => {
     const clinical: QueueAccess = { frontDesk: false, clinical: true }
     expect(availableActions('booked', clinical)).toEqual(['start'])
     expect(availableActions('in_progress', clinical)).toEqual(['complete'])
+  })
+})
+
+describe('splitQueue', () => {
+  const entry = (id: number, status: QueueEntry['status'], waiting: boolean): QueueEntry => ({
+    appointment_id: id,
+    position: id,
+    est_wait_min: 0,
+    waiting,
+    acuity: 'a4',
+    status,
+    scheduled_start: '2026-11-14T05:00:00Z',
+    patient: { id, name: `P${id}`, mrn: `CAD-${id}` },
+    doctor: { id: 1, name: 'Dr X' },
+    type_name: 'General',
+  })
+
+  it('puts in-consult, checked-in and due patients in the live list, the rest in later', () => {
+    const { live, later } = splitQueue([
+      entry(1, 'in_progress', false),
+      entry(2, 'checked_in', true),
+      entry(3, 'booked', true),
+      entry(4, 'booked', false),
+    ])
+    expect(live.map((e) => e.appointment_id)).toEqual([1, 2, 3])
+    expect(later.map((e) => e.appointment_id)).toEqual([4])
+  })
+
+  it('handles an empty queue', () => {
+    expect(splitQueue([])).toEqual({ live: [], later: [] })
   })
 })

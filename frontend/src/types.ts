@@ -162,6 +162,8 @@ export interface QueueEntry {
   appointment_id: number
   position: number
   est_wait_min: number
+  /** Actually here / due now. False = booked for later today (not yet in the waiting room). */
+  waiting: boolean
   acuity: Acuity
   status: AppointmentStatus
   scheduled_start: string
