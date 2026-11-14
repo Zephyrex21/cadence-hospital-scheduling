@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+SLOT_STEP_MIN = 15  # bookable start times fall on this grid, aligned to each shift's start
+
 
 @dataclass(frozen=True)
 class Interval:
@@ -39,7 +41,7 @@ def generate_slots(
     shifts: list[Interval],
     busy: list[Interval],
     duration_min: int,
-    step_min: int = 15,
+    step_min: int = SLOT_STEP_MIN,
 ) -> list[Interval]:
     """Enumerate conflict-free candidate slots of ``duration_min`` within shifts.
 

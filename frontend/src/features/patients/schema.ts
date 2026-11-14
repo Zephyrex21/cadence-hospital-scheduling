@@ -6,9 +6,23 @@ export const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] a
 
 const optionalText = (max: number) => z.string().trim().max(max).optional().or(z.literal(''))
 
+/** Mirrors the backend: a phone number (7-15 digits, usual separators) or an e-mail address. */
+export function isValidContact(value: string): boolean {
+  const text = value.trim()
+  if (!text) return true // optional
+  if (text.includes('@')) return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(text)
+  const digits = text.replace(/\D/g, '').length
+  return /^[0-9+\-().,/\s]+$/.test(text) && digits >= 7 && digits <= 15
+}
+
 /** Validation for the patient registration form (mirrors backend PatientCreate). */
 export const patientFormSchema = z.object({
-  name: z.string().trim().min(1, 'Name is required').max(120),
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Name is required')
+    .min(2, 'Name must be at least 2 characters')
+    .max(120),
   date_of_birth: z
     .string()
     .min(1, 'Date of birth is required')
@@ -16,7 +30,10 @@ export const patientFormSchema = z.object({
     .refine((v) => v <= clinicToday(), 'Date of birth cannot be in the future'),
   sex: z.string().min(1, 'Select a sex'),
   blood_group: z.string().optional().or(z.literal('')),
-  contact: optionalText(120),
+  contact: optionalText(120).refine(
+    (v) => !v || isValidContact(v),
+    'Enter a valid phone number (7-15 digits) or e-mail address',
+  ),
   city: optionalText(80),
   emergency_contact: optionalText(160),
   notes: optionalText(500),

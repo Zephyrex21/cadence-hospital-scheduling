@@ -10,8 +10,10 @@ import logging
 import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
@@ -25,7 +27,12 @@ from app.api.patients import router as patients_router
 from app.api.profiles import router as profiles_router
 from app.api.scheduling import router as scheduling_router
 from app.core.config import settings
-from app.core.errors import AppError, app_error_handler, unhandled_error_handler
+from app.core.errors import (
+    AppError,
+    app_error_handler,
+    unhandled_error_handler,
+    validation_error_handler,
+)
 from app.core.migrate import run_migrations
 
 _log = logging.getLogger("uvicorn.error.cadence.main")
@@ -85,7 +92,22 @@ def create_app() -> FastAPI:
     )
 
     app.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RequestValidationError, validation_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(Exception, unhandled_error_handler)
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next: Any) -> Response:
+        response: Response = await call_next(request)
+        # JSON API only: it must never be sniffed, framed, or cached (it carries patient data).
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
+        )
+        if request.url.path not in ("/docs", "/redoc", "/openapi.json"):
+            response.headers.setdefault("Cache-Control", "no-store")
+        return response
 
     app.include_router(health_router)
     app.include_router(auth_router)

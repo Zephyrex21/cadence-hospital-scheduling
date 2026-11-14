@@ -28,7 +28,38 @@ def _clean(value: str | None) -> str | None:
     return value or None
 
 
+def _possible_duplicates(db: Session, data: PatientCreate) -> list[Patient]:
+    name = " ".join(data.name.split()).lower()
+    return list(
+        db.scalars(
+            select(Patient)
+            .where(func.lower(Patient.name) == name, Patient.date_of_birth == data.date_of_birth)
+            .order_by(Patient.id)
+            .limit(5)
+        )
+    )
+
+
 def create_patient(db: Session, data: PatientCreate, *, actor_id: int) -> Patient:
+    if not data.allow_duplicate:
+        matches = _possible_duplicates(db, data)
+        if matches:
+            raise ConflictError(
+                "A patient with the same name and date of birth is already registered",
+                details={
+                    "code": "possible_duplicate",
+                    "matches": [
+                        {
+                            "id": p.id,
+                            "mrn": p.mrn,
+                            "name": p.name,
+                            "date_of_birth": p.date_of_birth.isoformat(),
+                            "city": p.city,
+                        }
+                        for p in matches
+                    ],
+                },
+            )
     # Allocate the MRN by *inserting* it inside a savepoint and retrying on a collision, rather
     # than checking first: two simultaneous registrations could otherwise both pass the check.
     patient: Patient | None = None

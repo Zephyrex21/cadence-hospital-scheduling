@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.enums import AppointmentOrigin, AppointmentStatus
 
@@ -54,6 +54,16 @@ class AppointmentCreate(BaseModel):
     doctor_id: int
     type_id: int
     scheduled_start: datetime
+
+    @field_validator("scheduled_start")
+    @classmethod
+    def _needs_timezone(cls, value: datetime) -> datetime:
+        # "10:00" without a zone is ambiguous (UTC? clinic time?) — refuse to guess.
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError(
+                "scheduled_start must include a timezone, e.g. 2026-11-16T10:00:00+05:30 or ...Z"
+            )
+        return value
 
 
 class SlotRead(BaseModel):

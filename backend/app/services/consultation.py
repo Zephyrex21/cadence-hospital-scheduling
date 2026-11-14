@@ -21,7 +21,7 @@ from app.core.enums import (
 )
 from app.core.errors import ConflictError, ForbiddenError, NotFoundError
 from app.models.appointment import Appointment
-from app.models.base import ensure_aware_utc
+from app.models.base import ensure_aware_utc, utcnow
 from app.models.user import User
 from app.scheduling.queue import QueueItem, compute_queue
 from app.services.audit import record_audit
@@ -142,6 +142,11 @@ def change_consultation_status(
         )
     if expected_version is not None and expected_version != appt.version:
         raise ConflictError("Appointment was modified by someone else; reload and retry")
+    if action == ConsultationAction.NO_SHOW and ensure_aware_utc(appt.scheduled_start) > utcnow():
+        raise ConflictError(
+            "Can't mark a no-show before the appointment time. Cancel it instead.",
+            details={"code": "too_early"},
+        )
 
     if action == ConsultationAction.START:
         busy = db.scalar(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Any, Literal
 
@@ -10,6 +11,21 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 Sex = Literal["male", "female", "other"]
 BloodGroup = Literal["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
 _OLDEST_BIRTH_YEAR = 1900
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_PHONE_CHARS = re.compile(r"^[0-9+\-().,/\s]+$")
+
+
+def check_contact(value: str) -> str:
+    """A contact is a phone number (7-15 digits, usual separators allowed) or an e-mail."""
+    text = value.strip()
+    if "@" in text:
+        if not _EMAIL.match(text):
+            raise ValueError("Enter a valid e-mail address or phone number")
+        return text
+    digits = sum(ch.isdigit() for ch in text)
+    if not _PHONE_CHARS.match(text) or not 7 <= digits <= 15:
+        raise ValueError("Enter a valid phone number (7-15 digits) or e-mail address")
+    return text
 
 
 class PatientCreate(BaseModel):
@@ -21,6 +37,14 @@ class PatientCreate(BaseModel):
     blood_group: BloodGroup | None = None
     emergency_contact: str | None = Field(default=None, max_length=160)
     notes: str | None = Field(default=None, max_length=500)
+    # Registering someone who matches an existing name + date of birth is refused (it is
+    # usually a double entry) unless the clerk explicitly confirms.
+    allow_duplicate: bool = False
+
+    @field_validator("contact")
+    @classmethod
+    def _valid_contact(cls, value: str | None) -> str | None:
+        return None if value is None else check_contact(value)
 
     @field_validator("name", mode="before")
     @classmethod

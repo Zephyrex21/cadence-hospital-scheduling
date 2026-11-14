@@ -6,6 +6,19 @@ import { defineConfig } from 'vite'
 // FastAPI server in development and stripped to the backend's real routes.
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // Stable vendor chunks: they change rarely, so browsers keep them cached across deploys.
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          motion: ['framer-motion'],
+          query: ['@tanstack/react-query'],
+          forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {

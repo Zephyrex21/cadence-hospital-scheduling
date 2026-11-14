@@ -10,6 +10,7 @@ import logging
 from typing import Any
 
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
@@ -100,4 +101,35 @@ def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
             "error": {"code": exc.code, "message": exc.message, "details": exc.details}
         },
         headers=headers,
+    )
+
+
+_MAX_MESSAGES = 3
+
+
+def _friendly(error: dict[str, Any]) -> tuple[str, str]:
+    field = " › ".join(str(part) for part in error.get("loc", ()) if part not in ("body", "query"))
+    message = str(error.get("msg", "Invalid value")).removeprefix("Value error, ")
+    return field, message
+
+
+def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    """Request-validation failures use the same envelope as every other error.
+
+    ``message`` lists up to three problems ("name: ...; contact: ...") so the UI can show them
+    all at once; ``details`` carries every one, field by field, for forms that want them.
+    """
+    problems = [_friendly(e) for e in exc.errors()]
+    shown = [f"{f}: {m}" if f else m for f, m in problems[:_MAX_MESSAGES]]
+    more = len(problems) - len(shown)
+    message = "; ".join(shown) + (f" (+{more} more)" if more > 0 else "")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": "validation_error",
+                "message": message or "Invalid request",
+                "details": [{"field": f, "message": m} for f, m in problems],
+            }
+        },
     )

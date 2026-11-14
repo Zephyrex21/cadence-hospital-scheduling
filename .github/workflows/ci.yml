@@ -113,5 +113,7 @@ jobs:
         run: pnpm run typecheck
       - name: Build
         run: pnpm run build
+      - name: CSP matches the built page
+        run: pnpm run check:csp
       - name: Tests (vitest)
         run: pnpm test

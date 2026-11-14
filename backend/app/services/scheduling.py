@@ -29,7 +29,12 @@ from app.models.doctor import DoctorProfile
 from app.models.patient import Patient
 from app.models.shift import Shift
 from app.models.user import User
-from app.scheduling.availability import Interval, fits_in_any, generate_slots, has_conflict
+from app.scheduling.availability import (
+    SLOT_STEP_MIN,
+    Interval,
+    generate_slots,
+    has_conflict,
+)
 from app.schemas.scheduling import AppointmentCreate
 from app.services.audit import record_audit
 from app.services.locking import lock_doctors
@@ -189,8 +194,16 @@ def book_appointment(db: Session, data: AppointmentCreate, *, actor_id: int) -> 
     # Look at the candidate's own time range (not a UTC calendar day): a booking
     # near midnight must still see appointments just across the boundary.
     shifts = _shift_intervals(db, data.doctor_id, start, end)
-    if not fits_in_any(candidate, shifts):
+    containing = next((s for s in shifts if s.contains(candidate)), None)
+    if containing is None:
         raise ValidationError("Requested time is outside the doctor's availability")
+    offset_min = (start - containing.start).total_seconds() / 60
+    if offset_min % SLOT_STEP_MIN != 0:
+        raise ValidationError(
+            f"Appointments start every {SLOT_STEP_MIN} minutes from the start of the doctor's "
+            "shift; pick one of the listed slots",
+            details={"code": "off_grid"},
+        )
 
     # The patient cannot be in two places at once — reject an overlap with any of
     # their own active appointments (across every doctor), not just this doctor's.

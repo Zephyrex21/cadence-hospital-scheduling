@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 
 import { Button } from '../../components/Button'
@@ -11,7 +12,26 @@ import { clinicToday } from '../../lib/time'
 import { useRegisterPatient } from './api'
 import { BLOOD_GROUPS, patientFormSchema, type PatientFormValues } from './schema'
 
+interface DuplicateMatch {
+  id: number
+  mrn: string
+  name: string
+  date_of_birth: string
+  city?: string | null
+}
+
+/** The server's `possible_duplicate` conflict carries the existing records it matched. */
+function duplicateMatches(err: unknown): DuplicateMatch[] | null {
+  if (!(err instanceof ApiError)) return null
+  const details = err.details as { code?: string; matches?: DuplicateMatch[] } | undefined
+  return details?.code === 'possible_duplicate' ? (details.matches ?? []) : null
+}
+
 export function PatientForm({ onCreated }: { onCreated?: () => void }) {
+  const [duplicates, setDuplicates] = useState<{
+    matches: DuplicateMatch[]
+    values: PatientFormValues
+  } | null>(null)
   const register_mutation = useRegisterPatient()
   const { toast } = useToast()
   const {
@@ -34,18 +54,27 @@ export function PatientForm({ onCreated }: { onCreated?: () => void }) {
     },
   })
 
-  const onSubmit = handleSubmit(async (values) => {
+  const submit = async (values: PatientFormValues, allowDuplicate: boolean) => {
     try {
-      await register_mutation.mutateAsync(values)
+      await register_mutation.mutateAsync({ values, allowDuplicate })
       toast({ tone: 'success', title: 'Patient registered', description: values.name })
+      setDuplicates(null)
       reset()
       onCreated?.()
     } catch (err) {
+      const matches = duplicateMatches(err)
+      if (matches) {
+        setDuplicates({ matches, values })
+        return
+      }
+      setDuplicates(null)
       setError('root', {
         message: err instanceof ApiError ? err.message : 'Could not register patient.',
       })
     }
-  })
+  }
+
+  const onSubmit = handleSubmit((values) => submit(values, false))
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
@@ -96,6 +125,35 @@ export function PatientForm({ onCreated }: { onCreated?: () => void }) {
         {...register('notes')}
         error={errors.notes?.message}
       />
+
+      {duplicates ? (
+        <div
+          role="alert"
+          className="flex flex-col gap-2 rounded-control border border-warning/30 bg-warning/10 px-3.5 py-3 text-sm text-ink"
+        >
+          <p className="font-medium">This looks like someone who is already registered.</p>
+          <ul className="text-muted">
+            {duplicates.matches.map((m) => (
+              <li key={m.id}>
+                {m.name} · <span className="font-mono">{m.mrn}</span> · born {m.date_of_birth}
+                {m.city ? ` · ${m.city}` : ''}
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setDuplicates(null)}
+            >
+              Check the list first
+            </Button>
+            <Button type="button" onClick={() => void submit(duplicates.values, true)}>
+              Register anyway
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {errors.root ? (
         <div

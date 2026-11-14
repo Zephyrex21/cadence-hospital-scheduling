@@ -15,7 +15,13 @@ export function usePatients(query: string) {
 export function useRegisterPatient() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (values: PatientFormValues) => {
+    mutationFn: ({
+      values,
+      allowDuplicate = false,
+    }: {
+      values: PatientFormValues
+      allowDuplicate?: boolean
+    }) => {
       // Blank optional fields are sent as null so the record stays clean.
       const clean = (v?: string) => v?.trim() || null
       const payload = {
@@ -27,6 +33,7 @@ export function useRegisterPatient() {
         blood_group: clean(values.blood_group),
         emergency_contact: clean(values.emergency_contact),
         notes: clean(values.notes),
+        ...(allowDuplicate ? { allow_duplicate: true } : {}),
       }
       return apiFetch<Patient>('/patients', { method: 'POST', body: payload })
     },

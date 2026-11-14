@@ -294,7 +294,7 @@ def test_patient_input_is_validated(
     assert created.status_code == 201
     assert created.json()["name"] == "Ravi Kumar"
     assert created.json()["blood_group"] is None and created.json()["city"] is None
-    assert post(blood_group="AB-") == 201
+    assert post(blood_group="AB-", allow_duplicate=True) == 201
 
 
 # --- 14. one open escalation per patient ---

@@ -260,8 +260,10 @@ def test_front_desk_can_check_in_and_mark_no_show_but_not_run_the_consultation(
         doctor = make_doctor(db_session, user_factory)
         appt_type = make_type(db_session)
         first = make_appt(db_session, doctor, make_patient(db_session, 9), appt_type, T)
+        # An earlier slot whose patient never turned up (a no-show is only valid once the
+        # appointment time has passed).
         second = make_appt(db_session, doctor, make_patient(db_session, 10), appt_type,
-                           T + timedelta(minutes=30))
+                           T - timedelta(minutes=30))
         recep = auth_headers(user_factory(Role.RECEPTIONIST))
         nurse = auth_headers(user_factory(Role.TRIAGE_NURSE))
 
