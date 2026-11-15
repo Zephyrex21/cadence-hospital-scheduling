@@ -13,6 +13,7 @@ export {
   CaretRight,
   Check,
   CheckCircle,
+  ChatCircleText,
   CircleNotch,
   ClipboardText,
   Clock,

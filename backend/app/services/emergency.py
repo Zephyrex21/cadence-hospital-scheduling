@@ -43,6 +43,7 @@ from app.scheduling.engine_adapter import (
 )
 from app.services.audit import record_audit
 from app.services.locking import lock_doctors
+from app.services.notifications import queue_moved
 
 _TRIGGER = "emergency_insert"
 
@@ -299,6 +300,11 @@ def _apply_plan(
                 to_start=to_start,
                 reason=reason,
             )
+        )
+        # Tell the patient (outbox row in this same transaction; delivered after commit).
+        queue_moved(
+            db, appt, from_start=from_start, to_start=to_start,
+            decision_id=record.id, reason="emergency",
         )
         record_audit(
             db,

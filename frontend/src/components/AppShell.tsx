@@ -23,6 +23,7 @@ import {
   Stethoscope,
   UsersThree,
   X,
+  ChatCircleText,
   type Icon,
 } from './icons'
 import { Tooltip } from './Tooltip'
@@ -43,6 +44,12 @@ const NAV: NavEntry[] = [
   { to: '/queue', label: 'Queue', icon: ListChecks },
   { to: '/emergency', label: 'Emergency', icon: Siren, roles: EMERGENCY_ROLES },
   { to: '/displacements', label: 'Displacements', icon: ClockCounterClockwise },
+  {
+    to: '/notifications',
+    label: 'Notifications',
+    icon: ChatCircleText,
+    roles: EMERGENCY_ROLES,
+  },
   { to: '/patients', label: 'Patients', icon: UsersThree },
   { to: '/staff', label: 'Staff', icon: Stethoscope },
   { to: '/audit', label: 'Decisions & audit', icon: ClipboardText, roles: ADMIN_ONLY },

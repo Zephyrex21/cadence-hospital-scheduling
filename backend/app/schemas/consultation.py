@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.enums import Acuity, AppointmentStatus, ConsultationAction
 
@@ -42,3 +42,23 @@ class StatusChangeResponse(BaseModel):
     id: int
     status: AppointmentStatus
     version: int
+
+
+class ExtendRequest(BaseModel):
+    minutes: int = Field(ge=5, le=120)
+    version: int | None = None
+
+
+class ExtendDisplaced(BaseModel):
+    appointment_id: int
+    patient_name: str
+    from_start: datetime
+    to_start: datetime
+
+
+class ExtendResponse(BaseModel):
+    id: int
+    scheduled_end: datetime
+    version: int
+    decision_id: int | None
+    displaced: list[ExtendDisplaced]

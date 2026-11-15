@@ -17,11 +17,15 @@ from app.core.deps import get_current_user, require_roles
 from app.core.enums import Role
 from app.models.user import User
 from app.schemas.consultation import (
+    ExtendRequest,
+    ExtendResponse,
     QueueEntryOut,
     StatusChangeRequest,
     StatusChangeResponse,
 )
 from app.services.consultation import change_consultation_status, list_queue
+from app.services.notifications import dispatch_queued
+from app.services.overrun import extend_consultation
 
 router = APIRouter(tags=["consultation"])
 
@@ -51,3 +55,18 @@ def change_status(
         db, appointment_id, body.action, actor=actor, expected_version=body.version
     )
     return StatusChangeResponse(id=appt.id, status=appt.status, version=appt.version)
+
+
+@router.post("/appointments/{appointment_id}/extend", response_model=ExtendResponse)
+def extend(
+    appointment_id: int,
+    body: ExtendRequest,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(Role.DOCTOR, Role.ADMINISTRATOR)),
+) -> ExtendResponse:
+    """The consultation is running over: extend it and push later patients back."""
+    result = extend_consultation(
+        db, appointment_id, body.minutes, actor=actor, expected_version=body.version
+    )
+    dispatch_queued(db)  # tell the patients who were moved; never fails the request
+    return ExtendResponse.model_validate(result)

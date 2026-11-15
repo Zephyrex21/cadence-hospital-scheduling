@@ -36,6 +36,7 @@ from app.services.scheduling import (
     list_doctors,
     list_schedule,
     list_shifts,
+    reserved_for_day,
 )
 
 router = APIRouter(tags=["scheduling"])
@@ -144,3 +145,14 @@ def cancel(
         expected_version=body.version,
     )
     return _serialize(appt)
+
+
+@router.get("/doctors/{doctor_id}/emergency-reserve", response_model=list[SlotRead])
+def get_emergency_reserve(
+    doctor_id: int,
+    day: datetime = Query(..., description="Any instant within the clinic day."),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> list[SlotRead]:
+    """Windows held back from routine booking so emergencies can usually be absorbed."""
+    return [SlotRead(start=iv.start, end=iv.end) for iv in reserved_for_day(db, doctor_id, day)]

@@ -303,7 +303,15 @@ function OptionsDialog({ item, onClose }: { item: EscalationItem; onClose: () =>
   const data = options.data
   const anyExpired = !!data?.options.some((o) => o.expired)
   const nothingApplicable = !!data && data.options.length > 0 && !data.options.some((o) => o.applicable)
-  const canReplan = !!data && (anyExpired || nothingApplicable || data.options.length === 0)
+  // The server refuses an apply when the schedule moved on (or the plan aged out) even though
+  // the options on screen still look fine — in that case offer a re-plan right where the error is.
+  const applyCode =
+    apply.error instanceof ApiError
+      ? ((apply.error.details as { code?: string } | undefined)?.code ?? apply.error.code)
+      : null
+  const staleApply = applyCode === 'schedule_changed' || applyCode === 'plan_expired'
+  const canReplan =
+    !!data && (anyExpired || nothingApplicable || data.options.length === 0 || staleApply)
 
   return (
     <Modal
@@ -330,18 +338,22 @@ function OptionsDialog({ item, onClose }: { item: EscalationItem; onClose: () =>
         )}
         {canReplan && (
           <div className="flex flex-col gap-2 rounded-control bg-canvas/70 p-3">
-            {(anyExpired || nothingApplicable) && (
+            {(anyExpired || nothingApplicable || staleApply) && (
               <p className="text-sm text-warning">
-                {anyExpired
-                  ? 'Some options have expired — the schedule has moved on since they were proposed.'
-                  : 'None of these options can be applied right now.'}
+                {staleApply
+                  ? 'The schedule changed since these options were proposed, so nothing was applied. Re-plan to get fresh options.'
+                  : anyExpired
+                    ? 'Some options have expired — the schedule has moved on since they were proposed.'
+                    : 'None of these options can be applied right now.'}
               </p>
             )}
             <div>
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => replan.mutate(item.decision_id)}
+                onClick={() =>
+                  replan.mutate(item.decision_id, { onSuccess: () => apply.reset() })
+                }
                 loading={replan.isPending}
               >
                 Re-plan
@@ -400,7 +412,7 @@ function OptionsDialog({ item, onClose }: { item: EscalationItem; onClose: () =>
             />
           </>
         )}
-        {applyError && (
+        {applyError && !staleApply && (
           <p role="alert" className="text-sm text-danger">
             {applyError}
           </p>

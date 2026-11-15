@@ -33,6 +33,7 @@ from app.services.emergency import (
     plan_emergency,
     replan_escalation,
 )
+from app.services.notifications import dispatch_queued
 
 router = APIRouter(tags=["emergency"])
 
@@ -104,6 +105,7 @@ def commit(
         plan_digest_value=body.plan_digest,
         now=body.now,
     )
+    dispatch_queued(db)  # tell displaced patients; never fails the request
     return CommitResponse.model_validate(result)
 
 
@@ -143,4 +145,5 @@ def apply_escalation(
         actor_id=actor.id,
         note=body.note,
     )
+    dispatch_queued(db)
     return CommitResponse.model_validate(result)

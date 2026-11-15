@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.clock import clinic_day_bounds
+from app.core.config import settings
 from app.core.enums import AppointmentOrigin, AppointmentStatus, AuditAction
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.models.appointment import Appointment
@@ -34,6 +35,7 @@ from app.scheduling.availability import (
     Interval,
     generate_slots,
     has_conflict,
+    reserved_blocks,
 )
 from app.schemas.scheduling import AppointmentCreate
 from app.services.audit import record_audit
@@ -113,6 +115,19 @@ def list_shifts(db: Session, doctor_id: int, day: datetime) -> list[Shift]:
     )
 
 
+def emergency_reserve(shifts: list[Interval]) -> list[Interval]:
+    """The windows held back from routine booking (see ``reserved_blocks``)."""
+    return reserved_blocks(
+        shifts, settings.emergency_reserve_blocks, settings.emergency_reserve_min
+    )
+
+
+def reserved_for_day(db: Session, doctor_id: int, day: datetime) -> list[Interval]:
+    day = ensure_aware_utc(day)
+    lo, hi = clinic_day_bounds(day)
+    return emergency_reserve(_shift_intervals(db, doctor_id, lo, hi))
+
+
 def available_slots(db: Session, doctor_id: int, type_id: int, day: datetime) -> list[Interval]:
     day = ensure_aware_utc(day)
     appt_type = db.get(AppointmentType, type_id)
@@ -130,6 +145,8 @@ def available_slots(db: Session, doctor_id: int, type_id: int, day: datetime) ->
     busy_lo = min((s.start for s in shifts), default=lo)
     busy_hi = max((s.end for s in shifts), default=hi)
     busy = [iv for _, iv in _busy_intervals(db, doctor_id, busy_lo, busy_hi)]
+    # Time held for emergencies is not offered to routine bookings.
+    busy += emergency_reserve(shifts)
     slots = generate_slots(shifts, busy, appt_type.default_duration_min)
     # Never offer a slot that has already started — the clock moves while the
     # page is open, so a slot valid at render can be in the past at booking.
@@ -211,6 +228,12 @@ def book_appointment(db: Session, data: AppointmentCreate, *, actor_id: int) -> 
         raise ConflictError(
             "The patient already has an appointment overlapping that time",
             details={"code": "patient_overlap"},
+        )
+
+    if has_conflict(candidate, emergency_reserve(shifts)):
+        raise ValidationError(
+            "That time is held back for emergencies; please choose another slot",
+            details={"code": "emergency_reserve"},
         )
 
     busy = [iv for _, iv in _busy_intervals(db, data.doctor_id, start, end, for_update=True)]

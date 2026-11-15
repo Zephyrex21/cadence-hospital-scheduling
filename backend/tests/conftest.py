@@ -33,9 +33,11 @@ def _test_runtime_settings() -> Iterator[None]:
     previous = settings.allow_client_now
     previous_migrate = settings.auto_migrate
     previous_tz = settings.clinic_timezone
+    previous_reserve = settings.emergency_reserve_blocks
     settings.clinic_timezone = "UTC"  # legacy tests reason in UTC days; IST has its own tests
     settings.allow_client_now = True
     settings.auto_migrate = False  # tests build their schema with create_all
+    settings.emergency_reserve_blocks = 0  # legacy tests book freely; reserve has its own tests
     login_throttle.clear()
     try:
         yield
@@ -43,6 +45,7 @@ def _test_runtime_settings() -> Iterator[None]:
         settings.allow_client_now = previous
         settings.auto_migrate = previous_migrate
         settings.clinic_timezone = previous_tz
+        settings.emergency_reserve_blocks = previous_reserve
 
 
 @pytest.fixture()

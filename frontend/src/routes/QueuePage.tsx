@@ -2,13 +2,15 @@ import { AnimatePresence, m } from 'framer-motion'
 import type { ConsultationAction } from '../types'
 
 import { Card } from '../components/Card'
+import { useToast } from '../components/Toast'
+import { ApiError } from '../lib/api'
 import { IllustrationEmptyList } from '../components/illustrations'
 import { Skeleton } from '../components/Skeleton'
 import { StatusBadge } from '../components/StatusBadge'
 import { EmptyState, ErrorState } from '../components/states'
 import { useAuth } from '../features/auth/AuthContext'
 import { AcuityChip } from '../features/emergency/AcuityChip'
-import { useChangeStatus, useQueue } from '../features/queue/api'
+import { useChangeStatus, useExtendConsultation, useQueue } from '../features/queue/api'
 import {
   ACTION_LABEL,
   availableActions,
@@ -23,6 +25,29 @@ export function QueuePage() {
   const { user } = useAuth()
   const queue = useQueue()
   const change = useChangeStatus()
+  const extend = useExtendConsultation()
+  const { toast } = useToast()
+
+  async function extendBy(id: number, minutes: number) {
+    try {
+      const res = await extend.mutateAsync({ id, minutes })
+      const n = res.displaced.length
+      toast({
+        tone: 'success',
+        title: `Consultation extended by ${minutes} min`,
+        description:
+          n === 0
+            ? 'No one else was affected.'
+            : `${n} later patient${n === 1 ? '' : 's'} moved back and notified.`,
+      })
+    } catch (err) {
+      toast({
+        tone: 'danger',
+        title: 'Could not extend',
+        description: err instanceof ApiError ? err.message : undefined,
+      })
+    }
+  }
 
   // Arrival / no-show are front-desk work (reception, nurses); starting and completing a
   // consultation are clinical (the owning doctor, or an administrator).
@@ -81,6 +106,8 @@ export function QueuePage() {
               accessFor={accessFor}
               pending={change.isPending}
               onAction={(id, action) => change.mutate({ id, action })}
+              onExtend={extendBy}
+              extending={extend.isPending}
               emptyText="Nobody is waiting right now."
             />
             {later.length > 0 && (
@@ -93,6 +120,8 @@ export function QueuePage() {
                   accessFor={accessFor}
                   pending={change.isPending}
                   onAction={(id, action) => change.mutate({ id, action })}
+                  onExtend={extendBy}
+                  extending={extend.isPending}
                   upcoming
                 />
               </>
@@ -109,6 +138,8 @@ interface QueueSectionProps {
   accessFor: (entry: QueueEntry) => QueueAccess
   pending: boolean
   onAction: (id: number, action: ConsultationAction) => void
+  onExtend: (id: number, minutes: number) => void
+  extending: boolean
   /** Rows for patients booked later today: show the booked time instead of a wait estimate. */
   upcoming?: boolean
   emptyText?: string
@@ -119,6 +150,8 @@ function QueueSection({
   accessFor,
   pending,
   onAction,
+  onExtend,
+  extending,
   upcoming = false,
   emptyText,
 }: QueueSectionProps) {
@@ -176,6 +209,22 @@ function QueueSection({
                   {statusLabel(entry.status)}
                 </StatusBadge>
               </div>
+
+              {inProgress && accessFor(entry).clinical && (
+                <div className="flex flex-wrap items-center gap-1.5" aria-label="Running over?">
+                  <span className="text-xs text-muted">Running over?</span>
+                  {[10, 20].map((minutes) => (
+                    <button
+                      key={minutes}
+                      disabled={extending}
+                      onClick={() => onExtend(entry.appointment_id, minutes)}
+                      className="rounded-control bg-canvas px-2.5 py-1 text-xs font-medium text-ink ring-1 ring-inset ring-hairline transition-colors hover:bg-hairline/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      +{minutes} min
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {actions.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">

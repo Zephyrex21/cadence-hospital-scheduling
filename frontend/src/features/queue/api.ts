@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiFetch } from '../../lib/api'
-import type { ConsultationAction, QueueEntry } from '../../types'
+import type { ConsultationAction, ExtendResult, QueueEntry } from '../../types'
 
 export function useQueue(doctorId?: number) {
   return useQuery({
@@ -29,6 +29,24 @@ export function useChangeStatus() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['queue'] })
       void qc.invalidateQueries({ queryKey: ['schedule'] })
+    },
+  })
+}
+
+/** The consultation is running over: extend it and push later patients back (they're notified). */
+export function useExtendConsultation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, minutes }: { id: number; minutes: number }) =>
+      apiFetch<ExtendResult>(`/appointments/${id}/extend`, { method: 'POST', body: { minutes } }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['queue'] })
+      void qc.invalidateQueries({ queryKey: ['schedule'] })
+      void qc.invalidateQueries({ queryKey: ['slots'] })
+      void qc.invalidateQueries({ queryKey: ['dashboard'] })
+      void qc.invalidateQueries({ queryKey: ['displacements'] })
+      void qc.invalidateQueries({ queryKey: ['decisions'] })
+      void qc.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
 }

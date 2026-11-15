@@ -23,6 +23,7 @@ from app.api.dashboard import router as dashboard_router
 from app.api.emergency import router as emergency_router
 from app.api.health import router as health_router
 from app.api.history import router as history_router
+from app.api.notifications import router as notifications_router
 from app.api.patients import router as patients_router
 from app.api.profiles import router as profiles_router
 from app.api.scheduling import router as scheduling_router
@@ -117,6 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(emergency_router)
     app.include_router(consultation_router)
     app.include_router(history_router)
+    app.include_router(notifications_router)
     app.include_router(dashboard_router)
 
     @app.get("/", tags=["meta"])

@@ -79,6 +79,24 @@ class Settings(BaseSettings):
     # Render alone: 1. Browser -> Vercel rewrite -> Render: 2.
     trusted_proxy_count: int = 0
 
+    # Emergency "what-if" buffer: each shift keeps this many blocks of this many minutes free
+    # of routine bookings. Only the emergency engine may fill them, so an emergency is usually
+    # absorbed with no displacement at all. Set blocks to 0 to turn the buffer off.
+    emergency_reserve_blocks: int = 1
+    emergency_reserve_min: int = 30
+
+    # Patient notifications when an appointment is moved (displacement / consultation overrun).
+    #   console - log the message and mark it "sent" (demo; nothing leaves the server)
+    #   twilio  - really send via Twilio (needs the credentials below)
+    #   off     - don't create notifications at all
+    notify_provider: str = "console"
+    notify_channel: str = "sms"  # "sms" or "whatsapp" (twilio provider only)
+    notify_default_country_code: str = "91"  # for numbers saved without a +country prefix
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_sms_from: str = ""  # E.164 sender number, e.g. +15005550006
+    twilio_whatsapp_from: str = ""  # e.g. whatsapp:+14155238886
+
     # Login brute-force protection (per client-IP + email, and per email).
     login_max_attempts: int = 5
     login_window_sec: int = 15 * 60

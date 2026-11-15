@@ -10,6 +10,7 @@ from app.models.audit import AuditLog
 from app.models.decision import SchedulingDecision
 from app.models.displacement import AppointmentDisplacement
 from app.models.doctor import DoctorProfile
+from app.models.notification import Notification
 from app.models.patient import Patient
 from app.models.refresh_token import RefreshToken
 from app.models.shift import Shift
@@ -22,6 +23,7 @@ __all__ = [
     "AppointmentType",
     "AuditLog",
     "DoctorProfile",
+    "Notification",
     "Patient",
     "RefreshToken",
     "SchedulingDecision",

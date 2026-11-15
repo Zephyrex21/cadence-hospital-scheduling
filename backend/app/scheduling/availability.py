@@ -27,6 +27,34 @@ class Interval:
         return self.start <= other.start and other.end <= self.end
 
 
+def reserved_blocks(
+    shifts: list[Interval], blocks: int, minutes: int, step_min: int = SLOT_STEP_MIN
+) -> list[Interval]:
+    """Emergency-reserve windows: ``blocks`` evenly spaced ``minutes``-long holds per shift.
+
+    Routine bookings may not use them; only the emergency engine can. Block *k* is centred at
+    k/(blocks+1) of the shift and snapped to the booking grid, so the holds are predictable
+    (a 09:00-13:00 shift with one 30-minute block holds 10:45-11:15). Shifts too short to spare
+    the time are left alone.
+    """
+    if blocks <= 0 or minutes <= 0:
+        return []
+    held: list[Interval] = []
+    for shift in sorted(shifts, key=lambda s: s.start):
+        length_min = (shift.end - shift.start).total_seconds() / 60
+        if length_min < minutes * 2:
+            continue
+        latest = int((length_min - minutes) // step_min) * step_min
+        for k in range(1, blocks + 1):
+            centre = length_min * k / (blocks + 1)
+            offset = min(max(round((centre - minutes / 2) / step_min) * step_min, 0), latest)
+            start = shift.start + timedelta(minutes=offset)
+            block = Interval(start, start + timedelta(minutes=minutes))
+            if not any(block.overlaps(h) for h in held):
+                held.append(block)
+    return held
+
+
 def has_conflict(candidate: Interval, busy: list[Interval]) -> bool:
     """True if ``candidate`` overlaps any busy interval."""
     return any(candidate.overlaps(b) for b in busy)

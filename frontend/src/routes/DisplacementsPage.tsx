@@ -18,8 +18,8 @@ export function DisplacementsPage() {
       <div>
         <h2 className="font-display text-title font-semibold text-ink">Displaced appointments</h2>
         <p className="text-sm text-muted">
-          Every appointment an emergency moved — nothing is lost; each is traceable to the decision
-          that moved it.
+          Every appointment moved by an emergency or an overrunning consultation — nothing is lost;
+          each is traceable to the decision that moved it.
         </p>
       </div>
 

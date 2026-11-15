@@ -18,6 +18,10 @@ const DashboardPage = lazyRoute(() => import('./routes/DashboardPage'), 'Dashboa
 const DisplacementsPage = lazyRoute(() => import('./routes/DisplacementsPage'), 'DisplacementsPage')
 const EmergencyPage = lazyRoute(() => import('./routes/EmergencyPage'), 'EmergencyPage')
 const LoginPage = lazyRoute(() => import('./routes/LoginPage'), 'LoginPage')
+const NotificationsPage = lazyRoute(
+  () => import('./routes/NotificationsPage'),
+  'NotificationsPage',
+)
 const PatientsPage = lazyRoute(() => import('./routes/PatientsPage'), 'PatientsPage')
 const QueuePage = lazyRoute(() => import('./routes/QueuePage'), 'QueuePage')
 const SchedulePage = lazyRoute(() => import('./routes/SchedulePage'), 'SchedulePage')
@@ -51,7 +55,8 @@ export function App() {
                     <Route path="/queue" element={<QueuePage />} />
                     <Route path="/emergency" element={<EmergencyPage />} />
                     <Route path="/displacements" element={<DisplacementsPage />} />
-                    <Route path="/audit" element={<AuditPage />} />
+                    <Route path="/notifications" element={<NotificationsPage />} />
+                      <Route path="/audit" element={<AuditPage />} />
                     <Route path="*" element={<NotFoundPage />} />
                   </Routes>
                 </AppShell>

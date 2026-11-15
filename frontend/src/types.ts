@@ -389,3 +389,30 @@ export interface MongoStatus {
   enabled: boolean
   ok: boolean
 }
+
+export type NotificationStatus = 'queued' | 'sent' | 'failed' | 'skipped'
+
+export interface PatientNotification {
+  id: number
+  created_at: string
+  sent_at: string | null
+  kind: string
+  channel: 'sms' | 'whatsapp' | 'none'
+  provider: 'console' | 'twilio'
+  recipient: string | null
+  body: string
+  status: NotificationStatus
+  error: string | null
+  attempts: number
+  appointment_id: number | null
+  decision_id: number | null
+  patient: { id: number; name: string; mrn: string }
+}
+
+export interface ExtendResult {
+  id: number
+  scheduled_end: string
+  version: number
+  decision_id: number | null
+  displaced: { appointment_id: number; patient_name: string; from_start: string; to_start: string }[]
+}
