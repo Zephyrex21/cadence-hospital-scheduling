@@ -259,6 +259,13 @@ pnpm run e2e
   The Render URL lives in `frontend/src/lib/backend.ts` (override with `VITE_BACKEND_URL` in
   Vercel's env settings; an empty value disables the direct wake call). Set `CADENCE_JWT_SECRET`
   so sign-ins also survive the server restarting.
+  The notice shows what it is doing — *"Check #4: Server is still starting (HTTP 503) · wake signal
+  sent 2×"* — and, if it stops, why (e.g. *"Render has no service at this address"* means the URL in
+  `vercel.json` / `backend.ts` is wrong). Every probe carries a cache-busting query string, and the
+  API starts answering `/health` as soon as migrations finish: refreshing the demo data happens in
+  the background (only a brand-new, empty database is seeded first). To avoid cold starts
+  altogether, set the `KEEPALIVE_URL` repository variable to enable `.github/workflows/keepalive.yml`
+  (pings `/health` every 10 minutes).
 
 ## MongoDB profile store (optional)
 

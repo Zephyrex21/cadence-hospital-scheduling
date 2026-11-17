@@ -12,7 +12,7 @@ type Handler = (call: number) => Response | Promise<Response>
 function stubFetch(routes: Record<string, Handler>) {
   const calls: Record<string, number> = {}
   const fn = vi.fn(async (input: RequestInfo | URL) => {
-    const path = String(input).replace(/^\/api/, '')
+    const path = String(input).replace(/^\/api/, '').split('?')[0]
     const handler = routes[path]
     if (!handler) throw new Error(`unexpected request: ${path}`)
     calls[path] = (calls[path] ?? 0) + 1

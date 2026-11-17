@@ -1,0 +1,24 @@
+name: Keep the backend awake
+
+# Render's free tier sleeps after ~15 minutes without traffic, and waking it takes a minute or
+# so. Pinging /health every 10 minutes keeps it awake, so visitors never wait at all.
+#
+# OFF BY DEFAULT. Turn it on by adding a repository *variable* (Settings -> Secrets and
+# variables -> Actions -> Variables) named KEEPALIVE_URL with the API address, e.g.
+#   https://cadence-api-opro.onrender.com
+# Note: an always-awake free service uses ~744 of Render's 750 free hours per month, and
+# GitHub's scheduler can run a few minutes late, so this is best-effort.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    if: ${{ vars.KEEPALIVE_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /health
+        run: curl -fsS --retry 3 --retry-delay 5 --max-time 90 "${{ vars.KEEPALIVE_URL }}/health"

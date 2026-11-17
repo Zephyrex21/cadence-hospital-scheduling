@@ -13,7 +13,7 @@ import {
 /** A stand-in for fetch where `/health` is controllable. */
 function stubFetch(isUp: () => boolean) {
   const fn = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async (input) => {
-    const url = String(input)
+    const url = String(input).split('?')[0]
     if (!url.endsWith('/health')) throw new Error(`unexpected request: ${url}`)
     return isUp()
       ? new Response(JSON.stringify({ status: 'ok', service: 'cadence-api' }), {
@@ -96,7 +96,7 @@ describe('backend wake store', () => {
     await startBackendCheck()
 
     const direct = fetchMock.mock.calls.find(
-      ([u]) => String(u) === 'https://cadence-api.example.onrender.com/health',
+      ([u]) => String(u).startsWith('https://cadence-api.example.onrender.com/health?_='),
     )
     expect(direct).toBeDefined()
     expect(direct![1]?.mode).toBe('no-cors')

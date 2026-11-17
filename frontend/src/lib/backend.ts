@@ -12,16 +12,19 @@
 
 export const API_BASE = '/api'
 
-/** Don't flash a notice if the backend answers within this long. */
-const GRACE_MS = 1_200
-const RETRY_MS = 2_500
-const PING_TIMEOUT_MS = 15_000
-/** After this long without an answer we stop and offer a manual retry. */
-const GIVE_UP_MS = 4 * 60_000
-const KICK_EVERY_MS = 20_000
-const KICK_TIMEOUT_MS = 90_000
-/** Render sleeps after ~15 min without traffic; re-check a tab that was quiet for 10. */
-const STALE_MS = 10 * 60_000
+const DEFAULT_TIMING = {
+  /** Don't flash a notice if the backend answers within this long. */
+  graceMs: 1_200,
+  retryMs: 2_500,
+  pingTimeoutMs: 15_000,
+  /** After this long without an answer we stop and offer a manual retry. */
+  giveUpMs: 4 * 60_000,
+  /** Re-send the direct wake signal this often while waiting (cheap, and it can't hurt). */
+  kickEveryMs: 10_000,
+  kickTimeoutMs: 90_000,
+  /** Render sleeps after ~15 min without traffic; re-check a tab that was quiet for 10. */
+  staleMs: 10 * 60_000,
+}
 
 /** Where the Render service lives. Overridable per deployment with VITE_BACKEND_URL
  *  (set it to an empty string to disable the direct wake call). */
@@ -34,9 +37,31 @@ function resolveDirectUrl(): string | null {
   return url ? url.replace(/\/+$/, '') : null
 }
 
-const config = { directUrl: resolveDirectUrl() }
+const config = {
+  directUrl: resolveDirectUrl(),
+  apiBase: API_BASE,
+  timing: { ...DEFAULT_TIMING },
+}
 
 export type BackendPhase = 'idle' | 'checking' | 'waking' | 'ready' | 'failed'
+
+export type ProbeKind =
+  | 'ok'
+  | 'waking' // 502/503/504: the host is up but the app is still booting
+  | 'html' // Render's "service is starting" placeholder page
+  | 'no-service' // Render says nothing lives at this address
+  | 'proxy-error' // Vercel could not reach the API at all
+  | 'http'
+  | 'network'
+  | 'timeout'
+
+/** What the most recent health check actually saw — shown to the user so a long wait is never a mystery. */
+export interface ProbeResult {
+  ok: boolean
+  kind: ProbeKind
+  status?: number
+  detail: string
+}
 
 export interface BackendStatus {
   phase: BackendPhase
@@ -44,9 +69,28 @@ export interface BackendStatus {
   startedAt: number | null
   /** True when this cycle was slow enough that the user was told the server was waking. */
   wokeAfterWait: boolean
+  /** Health checks made so far in this session. */
+  attempts: number
+  /** Direct wake signals sent to the Render service so far. */
+  kicks: number
+  /** Whether the direct wake signal is enabled at all. */
+  directWake: boolean
+  last: ProbeResult | null
 }
 
-const IDLE: BackendStatus = { phase: 'idle', startedAt: null, wokeAfterWait: false }
+type CoreStatus = Pick<BackendStatus, 'phase' | 'startedAt' | 'wokeAfterWait'>
+
+const diag: { attempts: number; kicks: number; last: ProbeResult | null } = {
+  attempts: 0,
+  kicks: 0,
+  last: null,
+}
+
+function withDiag(core: CoreStatus): BackendStatus {
+  return { ...core, ...diag, directWake: config.directUrl !== null }
+}
+
+const IDLE: BackendStatus = withDiag({ phase: 'idle', startedAt: null, wokeAfterWait: false })
 
 let status: BackendStatus = IDLE
 let lastHealthyAt = 0
@@ -55,8 +99,14 @@ let inFlight: Promise<void> | null = null
 let watching = false
 const listeners = new Set<() => void>()
 
-function setStatus(next: BackendStatus): void {
-  status = next
+function setStatus(next: CoreStatus): void {
+  status = withDiag(next)
+  listeners.forEach((listener) => listener())
+}
+
+/** Re-publish the current status after the diagnostics changed (new check / new wake signal). */
+function refreshDiag(): void {
+  status = withDiag(status)
   listeners.forEach((listener) => listener())
 }
 
@@ -71,25 +121,84 @@ export function subscribeBackend(listener: () => void): () => void {
   }
 }
 
-async function probe(url: string, timeoutMs: number): Promise<boolean> {
+/** Defeat any CDN / browser cache between us and the API: a stale "still starting" answer
+ *  must never be mistaken for the live one. */
+function bust(url: string): string {
+  return `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`
+}
+
+async function probe(url: string, timeoutMs: number): Promise<ProbeResult> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const resp = await fetch(url, { signal: controller.signal, cache: 'no-store' })
-    if (!resp.ok) return false
-    const body = (await resp.json()) as { status?: string }
-    return body.status === 'ok'
+    const resp = await fetch(bust(url), { signal: controller.signal, cache: 'no-store' })
+    const code = resp.status
+    if (resp.headers.get('x-render-routing') === 'no-server') {
+      return {
+        ok: false,
+        kind: 'no-service',
+        status: code,
+        detail: `Render has no service at this address (HTTP ${code}). Check the API URL in vercel.json.`,
+      }
+    }
+    const vercelError = resp.headers.get('x-vercel-error')
+    if (vercelError) {
+      return {
+        ok: false,
+        kind: 'proxy-error',
+        status: code,
+        detail: `Vercel couldn't reach the API (${vercelError}, HTTP ${code}).`,
+      }
+    }
+    if (!resp.ok) {
+      if (code === 502 || code === 503 || code === 504) {
+        return { ok: false, kind: 'waking', status: code, detail: `Server is still starting (HTTP ${code}).` }
+      }
+      return {
+        ok: false,
+        kind: 'http',
+        status: code,
+        detail:
+          code === 404
+            ? 'HTTP 404 from the API — its address may be wrong.'
+            : `Unexpected response (HTTP ${code}).`,
+      }
+    }
+    try {
+      const body = (await resp.json()) as { status?: string }
+      if (body.status === 'ok') return { ok: true, kind: 'ok', status: code, detail: 'Server is up.' }
+      return { ok: false, kind: 'http', status: code, detail: 'The API answered, but not with a healthy status.' }
+    } catch {
+      const html = (resp.headers.get('content-type') ?? '').includes('html')
+      return {
+        ok: false,
+        kind: html ? 'html' : 'http',
+        status: code,
+        detail: html
+          ? "Got the host's loading page instead of the API — it is starting up."
+          : 'The API returned something that is not JSON.',
+      }
+    }
   } catch {
-    // Timeout, network error, or a non-JSON "waking up" placeholder page.
-    return false
+    return controller.signal.aborted
+      ? { ok: false, kind: 'timeout', detail: `No answer within ${Math.round(timeoutMs / 1000)}s.` }
+      : { ok: false, kind: 'network', detail: "Couldn't connect to the server (network error)." }
   } finally {
     clearTimeout(timer)
   }
 }
 
+async function probeProxy(timeoutMs: number): Promise<ProbeResult> {
+  const result = await probe(`${config.apiBase}/health`, timeoutMs)
+  diag.attempts += 1
+  diag.last = result
+  refreshDiag()
+  return result
+}
+
 /** Is the API actually up *through the same path real requests take* (`/api`)? Never throws. */
-export function pingBackend(timeoutMs = PING_TIMEOUT_MS): Promise<boolean> {
-  return probe(`${API_BASE}/health`, timeoutMs)
+export async function pingBackend(timeoutMs = config.timing.pingTimeoutMs): Promise<boolean> {
+  return (await probeProxy(timeoutMs)).ok
 }
 
 /** Fire-and-forget request straight at the Render service from the browser.
@@ -103,8 +212,10 @@ function kick(): void {
   const base = config.directUrl
   if (!base) return
   const controller = new AbortController()
-  setTimeout(() => controller.abort(), KICK_TIMEOUT_MS)
-  fetch(`${base}/health`, {
+  setTimeout(() => controller.abort(), config.timing.kickTimeoutMs)
+  diag.kicks += 1
+  refreshDiag()
+  fetch(bust(`${base}/health`), {
     mode: 'no-cors',
     cache: 'no-store',
     credentials: 'omit',
@@ -126,26 +237,26 @@ async function run(gen: number, startedAt: number): Promise<void> {
     if (gen === generation && status.phase === 'checking') {
       setStatus({ ...status, phase: 'waking' })
     }
-  }, GRACE_MS)
+  }, config.timing.graceMs)
 
   try {
     for (;;) {
-      const ok = await pingBackend()
+      const { ok } = await probeProxy(config.timing.pingTimeoutMs)
       if (gen !== generation) return
       if (ok) {
         lastHealthyAt = Date.now()
         setStatus({ phase: 'ready', startedAt, wokeAfterWait: status.phase === 'waking' })
         return
       }
-      if (Date.now() - startedAt > GIVE_UP_MS) {
+      if (Date.now() - startedAt > config.timing.giveUpMs) {
         setStatus({ phase: 'failed', startedAt, wokeAfterWait: false })
         return
       }
-      if (Date.now() - lastKick > KICK_EVERY_MS) {
+      if (Date.now() - lastKick > config.timing.kickEveryMs) {
         kick()
         lastKick = Date.now()
       }
-      await sleep(RETRY_MS)
+      await sleep(config.timing.retryMs)
       if (gen !== generation) return
     }
   } finally {
@@ -201,7 +312,7 @@ export function touchBackend(): void {
 /** Re-check a tab that's been quiet long enough for the host to have gone back to sleep. */
 export function recheckIfStale(): void {
   if (inFlight || status.phase === 'idle') return
-  if (Date.now() - lastHealthyAt < STALE_MS) return
+  if (Date.now() - lastHealthyAt < config.timing.staleMs) return
   void begin()
 }
 
@@ -211,9 +322,14 @@ export const __test = {
   reset(): void {
     generation += 1
     inFlight = null
-    status = IDLE
-    lastHealthyAt = 0
+    diag.attempts = 0
+    diag.kicks = 0
+    diag.last = null
     config.directUrl = resolveDirectUrl()
+    config.apiBase = API_BASE
+    config.timing = { ...DEFAULT_TIMING }
+    status = withDiag({ phase: 'idle', startedAt: null, wokeAfterWait: false })
+    lastHealthyAt = 0
     listeners.clear()
   },
 }

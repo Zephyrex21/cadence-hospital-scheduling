@@ -68,17 +68,63 @@ def _bootstrap_mongo() -> None:
         _log.exception("MongoDB bootstrap failed; profiles are unavailable until it succeeds")
 
 
+def _demo_data_exists() -> bool:
+    """Has the demo staff already been seeded? (Decides whether a refresh can wait.)"""
+    from sqlalchemy import func, select
+
+    from app.core.db import SessionLocal
+    from app.models.user import User
+
+    db = SessionLocal()
+    try:
+        return (db.scalar(select(func.count(User.id))) or 0) > 0
+    except Exception:  # noqa: BLE001 - unknown state: be safe and seed before serving
+        return False
+    finally:
+        db.close()
+
+
+def _background_startup() -> None:
+    """Slow, non-essential start-up work that must not delay the first response."""
+    try:
+        if settings.seed_demo_on_start:
+            from app.seed import refresh_demo_data
+
+            refresh_demo_data()
+        if settings.mongodb_uri.strip():
+            _bootstrap_mongo()  # after the seed: profile docs are built from fresh rows
+    except Exception:  # noqa: BLE001 - background work must never take the API down
+        _log.exception("Background start-up work failed; the API keeps running")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Get to "accepting requests" as fast as possible.
+
+    The API runs on a free host that sleeps when idle, and every second of start-up is a second
+    the user stares at the "waking up" notice. So: migrations run first (the schema must be
+    right), but refreshing the demo data — hundreds of queries on a slow, remote database —
+    happens in the background once the app is already answering ``/health``. The one exception
+    is a brand-new database with no users yet: there the seed runs first so the very first
+    visitor can sign in.
+    """
     if settings.auto_migrate:
         run_migrations()
-    if settings.seed_demo_on_start:
+    if settings.seed_demo_on_start and not _demo_data_exists():
         from app.seed import refresh_demo_data
 
         refresh_demo_data()
-    if settings.mongodb_uri.strip():
-        threading.Thread(target=_bootstrap_mongo, name="mongo-bootstrap", daemon=True).start()
+        threading.Thread(
+            target=_bootstrap_mongo_only, name="startup-mongo", daemon=True
+        ).start()
+    else:
+        threading.Thread(target=_background_startup, name="startup", daemon=True).start()
     yield
+
+
+def _bootstrap_mongo_only() -> None:
+    if settings.mongodb_uri.strip():
+        _bootstrap_mongo()
 
 
 def create_app() -> FastAPI:

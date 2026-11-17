@@ -98,6 +98,9 @@ export function BackendWakeBanner() {
               <p className="mt-0.5 text-sm text-muted">
                 This is taking longer than usual. The free server may be starting from cold.
               </p>
+              {backend.last && (
+                <p className="mt-1.5 text-xs text-muted">Last check: {backend.last.detail}</p>
+              )}
               <div className="mt-3">
                 <Button size="sm" variant="secondary" onClick={() => reportBackendDown()}>
                   Try again
@@ -115,6 +118,15 @@ export function BackendWakeBanner() {
               {cycle !== null && now - cycle >= 3_000 && (
                 <p className="mt-1.5 text-xs tabular-nums text-muted">
                   {Math.floor((now - cycle) / 1000)}s elapsed
+                </p>
+              )}
+              {/* Proof that we really are trying, and what the server said last. */}
+              {backend.attempts > 0 && (
+                <p className="mt-1 text-xs text-muted" data-testid="wake-diagnostics">
+                  Check #{backend.attempts}: {backend.last?.detail ?? 'waiting for a response…'}
+                  {backend.directWake
+                    ? ` · wake signal sent ${backend.kicks}×`
+                    : ' · direct wake signal is off'}
                 </p>
               )}
             </>
