@@ -9,23 +9,33 @@ not suitable for clinical use.
 
 The PostgreSQL seed (`backend/app/seed.py`) creates or refreshes:
 
-- **64 fictional patients** with Indian-style names, medical-record numbers, dates of birth,
-  mobile numbers, cities, blood groups, emergency contacts and short notes.
-- **11 staff accounts**, including two receptionists, two triage nurses, six doctors and the
+- **220 fictional patients** with realistic Indian names (matched to region and community),
+  dates of birth spread over all ages (about one in six is a child), believable mobile numbers,
+  cities, blood groups in realistic proportions, emergency contacts, and a clinical note for
+  everyone: conditions with medications and recent results, or "NKDA", plus allergies.
+  Generation is deterministic (`seed_data.py`), so numbers and histories never change between
+  runs or servers.
+- **17 staff accounts**: three receptionists, three triage nurses, ten doctors and the
   administrator account `admin@cadence.dev` (display name: Saurabh Raj Shekhar).
-- **Five specialties across six doctors**: general medicine (two doctors), cardiology,
-  paediatrics, orthopaedics and dermatology.
+- **Nine specialties across ten doctors**: general medicine (two doctors), cardiology,
+  paediatrics, orthopaedics, dermatology, ENT, gynaecology, pulmonology and neurology.
 - **14 days of doctor shifts**, split into 09:00–13:00 and 14:00–22:00 clinic sessions in
   `CADENCE_CLINIC_TIMEZONE` (Asia/Kolkata by default).
-- **A populated schedule**: around 120 appointments on a fresh database, with completed visits,
-  a no-show example, active consultations, waiting/check-in patients at different acuity levels,
-  and bookings on the next six days. The exact count varies with the current clinic time and
-  any existing appointments in the demo patients' schedules.
-- **Clinical-flow examples**: synthetic nurse triage records across A1–A5, an A2 emergency
-  insertion with a 30-minute displacement, one unresolved A1 escalation that requires
-  clinician direction, and one resolved historical escalation.
-- **Audit activity** for patient registrations, appointment creation/status examples, triage
-  entries and scheduling decisions.
+- **A busy, believable clinic** (`seed_flow.py`): about 130 appointments a day across ten
+  doctors, six days of history and six days ahead (busiest today, thinning out further
+  ahead, quieter Sundays). Mixes of visit types per specialty, acuity A2–A5, completed visits,
+  no-shows and cancellations. Roughly half the doctors are running late today (a consultation
+  overrunning, patients already waiting), people arrive early, and every doctor keeps 15-minute
+  gaps plus an emergency reserve window so the emergency flow stays demonstrable. Untouched
+  demo appointments follow the clock each time the seed runs; anything a real user has acted
+  on is never changed.
+- **A week of emergency history**: 3-4 emergencies a day with nurse triage (vitals and chief
+  complaint), an auto-committed scheduling decision, audit trail, and for about half of them
+  a displaced patient plus the SMS-style message sent to them (shown on the Notifications
+  page as "Logged (demo)"), and resolved A1 escalations with resolution notes. Today also has
+  a displacement scenario and one unresolved A1 escalation that needs a clinician.
+- **Audit activity**: about 2,300 entries (registrations, bookings, status changes, triage,
+  decisions).
 
 The seeded patients are grouped into small panels for each doctor. The additional emergency
 and displacement examples use dedicated demo patients, so they do not collide with the

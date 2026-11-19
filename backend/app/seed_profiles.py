@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.models.patient import Patient
 from app.models.user import User
 from app.mongo import repo
+from app.seed_data import CLINICAL, realistic_phone, staff_extras
 from app.services.profiles import sections_from_legacy
 
 
@@ -134,6 +135,17 @@ def _generic_patient_sections(patient: Patient) -> dict[str, Any]:
         "Kerala": "ml", "Rajasthan": "hi", "Uttar Pradesh": "hi",
         "Madhya Pradesh": "hi", "Chandigarh": "hi", "Assam": "as",
     }
+    clinical = CLINICAL.get(patient.mrn)
+    if clinical is not None:  # generated patients carry structured conditions, meds, allergies
+        return _patient(
+            patient.city or "New Delhi",
+            _street_address(patient, locality), state, pin,
+            language_by_state.get(state, "en"), _occupation(patient),
+            conditions=tuple(clinical["conditions"]),
+            allergies=tuple(clinical["allergies"]),
+            meds=tuple(clinical["meds"]),
+            scheme=clinical["scheme"], provider=clinical["provider"],
+        )
     return _patient(
         patient.city or "New Delhi",
         _street_address(patient, locality), state, pin,
@@ -274,6 +286,11 @@ _STAFF_EXTRAS: dict[str, dict[str, Any]] = {
         "employment": {"joined_on": date(2017, 5, 8).isoformat(), "status": "active"},
     },
 }
+
+# Realism pass: the four newer staff members, and believable phone numbers for everyone.
+_STAFF_EXTRAS.update(staff_extras())
+for _email, _doc in _STAFF_EXTRAS.items():
+    _doc["contact"] = {**_doc.get("contact", {}), "phone": realistic_phone(f"staff:{_email}")}
 
 
 def _merge(legacy: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:

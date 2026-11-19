@@ -489,7 +489,9 @@ def test_demo_profiles_seed_rich_data_without_overwriting_edits(db_session: Sess
     assert again is not None and again["notes"] == "edited"
 
     staff = database["staff_profiles"].count_documents({"doctor": {"$exists": True}})
-    assert staff == 6  # every doctor in the demo roster
+    from app.seed import _DOCTORS
+
+    assert staff == len(_DOCTORS)  # every doctor in the demo roster
     assert backfill_profiles(db_session, database) == {"patients": 0, "staff": 0}
 
 

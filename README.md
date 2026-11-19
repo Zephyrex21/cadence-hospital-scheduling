@@ -146,13 +146,13 @@ development). Sign in as **admin** to see the full product in one account.
 
 ### What's in the demo dataset
 
-The default seed now creates 64 fictitious patients, 11 staff accounts (including six
-specialists), 14 days of doctor shifts, roughly 120 appointments across today and the next
-six days, triage examples across acuity A1–A5, emergency scheduling decisions, a displacement,
-a pending clinician-review escalation, a resolved historical escalation, and a populated
-audit trail. When MongoDB is configured, the same patient and staff records also receive
-structured profile sections. The exact live counts depend on the current clinic time and
-whether existing appointments already occupy a seeded patient's slot. See
+The default seed creates 220 fictitious patients with realistic names, phone numbers and clinical
+notes, 17 staff accounts (ten doctors across nine specialties), 14 days of doctor shifts, about
+1,300 appointments (a busy clinic day is ~130 across six days back and six ahead), a week of
+emergency history with triage, decisions, displacements and patient messages, pending and
+resolved escalations, and a populated audit trail. The first seed takes a few seconds; re-running
+it adds nothing. When MongoDB is configured, the same patient and staff records also receive
+structured profile sections. The exact live counts depend on the current clinic time. See
 [docs/DEMO_DATA.md](docs/DEMO_DATA.md) for the seed behavior and deployment instructions.
 
 ## Alternative: PostgreSQL via Docker

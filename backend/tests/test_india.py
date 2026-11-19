@@ -152,7 +152,8 @@ def test_seed_upgrades_old_placeholder_data_in_place(
         "Registered By Hand"
     )
     # Shifts are IST sessions (09:00-13:00 / 14:00-22:00 IST) for every demo doctor, 14 days.
-    assert db_session.scalar(select(func.count()).select_from(Shift)) == 6 * 14 * 2
+    shifts = db_session.scalar(select(func.count()).select_from(Shift))
+    assert shifts == len(seed_module._DOCTORS) * 14 * 2
     first = db_session.scalars(select(Shift).order_by(Shift.start_utc)).first()
     assert first is not None and first.start_utc.astimezone(settings.clinic_tz).hour in (9, 14)
     assert db_session.scalar(select(func.count()).select_from(Appointment)) >= 4
@@ -188,9 +189,14 @@ def test_seed_builds_a_populated_operational_demo_and_is_idempotent(
     seed_module.seed(quiet=True)
     db_session.expire_all()
 
-    assert db_session.scalar(select(func.count()).select_from(Patient)) == 64
-    assert db_session.scalar(select(func.count()).select_from(DoctorProfile)) == 6
-    assert db_session.scalar(select(func.count()).select_from(Appointment)) >= 120
+    assert db_session.scalar(select(func.count()).select_from(Patient)) == len(
+        seed_module._PATIENTS
+    )
+    assert len(seed_module._PATIENTS) >= 200  # a believable population, not a handful
+    assert db_session.scalar(select(func.count()).select_from(DoctorProfile)) == len(
+        seed_module._DOCTORS
+    )
+    assert db_session.scalar(select(func.count()).select_from(Appointment)) >= 600  # busy week
     assert db_session.scalar(select(func.count()).select_from(TriageAssessment)) >= 8
     assert db_session.scalar(select(func.count()).select_from(SchedulingDecision)) >= 3
     assert db_session.scalar(select(func.count()).select_from(AppointmentDisplacement)) >= 1
@@ -205,7 +211,7 @@ def test_seed_builds_a_populated_operational_demo_and_is_idempotent(
     assert dashboard["completed_today"] > 0
     assert dashboard["displaced_today"] >= 1
     assert dashboard["escalations_pending"] >= 1
-    assert len(dashboard["doctor_load"]) == 6
+    assert len(dashboard["doctor_load"]) == len(seed_module._DOCTORS)
 
     tables = (User, Patient, Shift, Appointment, TriageAssessment,
               SchedulingDecision, AppointmentDisplacement, AuditLog)

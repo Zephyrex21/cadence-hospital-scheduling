@@ -192,7 +192,9 @@ def list_notifications(
     stmt = select(Notification, Patient).join(Patient, Patient.id == Notification.patient_id)
     if status:
         stmt = stmt.where(Notification.status == status)
-    rows = db.execute(stmt.order_by(Notification.id.desc()).limit(limit)).all()
+    rows = db.execute(
+        stmt.order_by(Notification.created_at.desc(), Notification.id.desc()).limit(limit)
+    ).all()
     return [(n, p) for n, p in rows]
 
 

@@ -21,6 +21,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import seed_data, seed_flow
 from app.core.config import settings
 from app.core.db import SessionLocal
 from app.core.enums import (
@@ -203,6 +204,14 @@ for _index, (_name, _dob, _sex, _city, _blood, _notes) in enumerate(_EXTRA_PATIE
         _family_contact(_index, _name, date.fromisoformat(_dob), _sex), _notes,
     ))
 
+# Realism pass: hand-written patients get believable phone numbers and clinical notes, and a
+# larger fictitious population (one in six is a child) is generated after them. MRNs and the
+# names/dates of birth of the original patients never change.
+_PATIENTS[:] = seed_data.upgrade_existing(_PATIENTS)
+_PATIENTS.extend(seed_data.generate_patients(100065, 156, {row[1] for row in _PATIENTS}))
+_STAFF.extend((name, email, Role(role)) for name, email, role in seed_data.EXTRA_STAFF)
+_DOCTORS.update(seed_data.EXTRA_DOCTORS)
+
 _TYPES = [
     ("General OPD consultation", 30, "general"),
     ("Follow-up visit", 15, "general"),
@@ -211,7 +220,29 @@ _TYPES = [
     ("Pediatric consultation", 30, "pediatrics"),
     ("Orthopedic consultation", 45, "orthopedics"),
     ("Dermatology consultation", 30, "dermatology"),
+    *seed_data.EXTRA_TYPES,
 ]
+
+# The consultation type each specialty's doctor mainly sees.
+_SPECIALTY_TYPE = {
+    "general": "General OPD consultation",
+    "cardiology": "Cardiology consultation",
+    "pediatrics": "Pediatric consultation",
+    "orthopedics": "Orthopedic consultation",
+    "dermatology": "Dermatology consultation",
+    "ent": "ENT consultation",
+    "gynaecology": "Gynaecology consultation",
+    "pulmonology": "Pulmonology consultation",
+    "neurology": "Neurology consultation",
+}
+
+
+def _panel_start(doctor_index: int) -> int:
+    """Offset of a doctor's 10-patient demo panel. Patients 61-64 are reserved for the decision
+    scenarios, so doctors added later (index >= 6) start after them."""
+    return doctor_index * 10 if doctor_index < 6 else 64 + (doctor_index - 6) * 10
+
+
 _TYPE_RENAMES = {
     "General consultation": "General OPD consultation",
     "Follow-up": "Follow-up visit",
@@ -413,14 +444,8 @@ def _type_for_specialty(
 ) -> AppointmentType:
     if index % 3 == 1:
         return types["Follow-up visit"]
-    if specialty == "cardiology":
-        return types["Cardiology consultation"]
-    if specialty == "pediatrics":
-        return types["Pediatric consultation"]
-    if specialty == "orthopedics":
-        return types["Orthopedic consultation"]
-    if specialty == "dermatology":
-        return types["Dermatology consultation"]
+    if specialty != "general":
+        return types[_SPECIALTY_TYPE[specialty]]
     return types["Extended consultation"] if index % 3 == 2 else types["General OPD consultation"]
 
 
@@ -458,20 +483,23 @@ def _ensure_sample_appointments(db: Session) -> None:
         (time(10, 15), "Extended consultation", Acuity.A5),
         (time(11, 15), "Follow-up visit", Acuity.A5),
     ]
-    future_acuities = [Acuity.A2, Acuity.A3, Acuity.A4]
-    current_types = {
-        "general": "General OPD consultation",
-        "cardiology": "Cardiology consultation",
-        "pediatrics": "Pediatric consultation",
-        "orthopedics": "Orthopedic consultation",
-        "dermatology": "Dermatology consultation",
-    }
+    # The next three patients in each doctor's queue. A real queue is mostly routine with the
+    # occasional sicker patient, not an A2 at the head of every list.
+    acuity_patterns = [
+        [Acuity.A4, Acuity.A5, Acuity.A3], [Acuity.A5, Acuity.A4, Acuity.A4],
+        [Acuity.A3, Acuity.A5, Acuity.A4], [Acuity.A5, Acuity.A5, Acuity.A3],
+        [Acuity.A2, Acuity.A4, Acuity.A5], [Acuity.A4, Acuity.A4, Acuity.A5],
+        [Acuity.A5, Acuity.A3, Acuity.A5], [Acuity.A4, Acuity.A5, Acuity.A5],
+        [Acuity.A3, Acuity.A4, Acuity.A5], [Acuity.A5, Acuity.A4, Acuity.A3],
+    ]
+    current_types = _SPECIALTY_TYPE
 
     for doctor_index, (email, specialty) in enumerate(_DOCTORS.items()):
         doctor = doctors.get(email)
         if doctor is None:
             continue
-        case_mrns = [f"CAD-{100001 + doctor_index * 10 + index:06d}" for index in range(10)]
+        panel = 100001 + _panel_start(doctor_index)
+        case_mrns = [f"CAD-{panel + index:06d}" for index in range(10)]
         stagger = timedelta(minutes=_STAGGER_MIN * (doctor_index % 2))
         doctor_slots: list[
             tuple[Patient, AppointmentType, datetime, Acuity, AppointmentOrigin]
@@ -542,6 +570,16 @@ def _ensure_sample_appointments(db: Session) -> None:
             )
             if index == 4:
                 local_start = _normalise_clinic_start(live_start + stagger, 30)
+                # A doctor who is running late started this consultation earlier than "now"
+                # suggests, so it is overrunning (the "Running over? +10 min" case). It can't
+                # start before the doctor's morning slots end.
+                late = seed_flow.lateness(email, now.astimezone(settings.clinic_tz).date())
+                if late and doctor_slots:
+                    earliest = max(
+                        (s + timedelta(minutes=t.default_duration_min))
+                        for _, t, s, *_ in doctor_slots
+                    ).astimezone(settings.clinic_tz) + timedelta(minutes=15)
+                    local_start = max(local_start - late, earliest)
                 acuity = Acuity.A3 if doctor_index % 2 == 0 else Acuity.A4
             else:
                 previous_end = (doctor_slots[-1][2] + timedelta(
@@ -550,10 +588,12 @@ def _ensure_sample_appointments(db: Session) -> None:
                 local_previous_end = previous_end.astimezone(settings.clinic_tz)
                 candidate = local_previous_end + timedelta(minutes=_QUEUE_GAP_MIN)
                 local_start = _normalise_clinic_start(candidate, appt_type.default_duration_min)
-                acuity = future_acuities[index - 5]
+                acuity = acuity_patterns[doctor_index % len(acuity_patterns)][index - 5]
             start = local_start.astimezone(UTC)
             end = start + timedelta(minutes=appt_type.default_duration_min)
             status = _appointment_status(start, end, now)
+            if index == 4 and status == AppointmentStatus.COMPLETED and start <= now:
+                status = AppointmentStatus.IN_PROGRESS  # running over, not finished
             doctor_slots.append((patient, appt_type, start, acuity, AppointmentOrigin.BOOKED))
             if end.astimezone(settings.clinic_tz).time() > time(22, 0):
                 continue
@@ -613,7 +653,7 @@ def _ensure_future_appointments(db: Session) -> None:
                 continue
             # Rotate through each doctor's synthetic patient panel rather than
             # booking the same people on every future date.
-            panel_start = doctor_index * 10
+            panel_start = _panel_start(doctor_index)
             patient_indexes = ((day_offset * 2) % 10, (day_offset * 2 + 1) % 10)
             for slot_index, (clock, patient_offset) in enumerate(
                 zip((time(10, 0), time(15, 0)), patient_indexes, strict=True)
@@ -1048,6 +1088,12 @@ def seed(*, quiet: bool = False) -> None:
         _ensure_future_appointments(db)
         _ensure_triage_scenarios(db)
         _ensure_decision_scenarios(db)
+        # Realism layer: busy doctors, a week of history, patient messages (idempotent).
+        now = datetime.now(UTC)
+        seed_flow.ensure_clinic_flow(db, now)
+        seed_flow.advance_demo_clock(db, now)
+        seed_flow.ensure_history(db, now)
+        seed_flow.ensure_notifications(db)
         _ensure_patient_audit_history(db)
         db.commit()
         if quiet:
